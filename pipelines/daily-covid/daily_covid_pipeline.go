@@ -209,9 +209,7 @@ func load_to_db(Reports []CaseReport) {
 	defer db.Close()
 
 	insertStatement := `INSERT INTO daily_covid_cases (LabReportDate, CasesTotal, DeathsTotal, CasesAge_0_17, CasesAge_18_29, CasesAge_30_39, CasesAge_40_49, CasesAge_50_59, CasesAge_60_69, CasesAge_70_79, CasesAge_80_, CasesAgeUnk, CasesMale, CasesFemale, CasesGenderUnk, CasesLatinx, CasesAsianNonLatinx, CasesBlackNonLatinx, CasesOtherNonLatinx, CasesEthUnk, DeathsAge_0_17, DeathsAge_18_29, DeathsAge_30_39, DeathsAge_40_49, DeathsAge_50_59, DeathsAge_60_69, DeathsAge_70_79, DeathsAge_80_, DeathsAgeUnk, DeathsMale, DeathsFemale, DeathsGenderUnk, DeathsLatinx, DeathsAsianNonLatinx, DeathsBlackNonLatinx, DeathsOtherNonLatinx, DeathsEthUnk) 
-							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36)
-							ON CONFLICT (TripID) 
-							DO NOTHING;`
+							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36);`
 
 	for _, v := range Reports {
 		_, err = db.Exec(insertStatement,
@@ -267,7 +265,7 @@ func test_successful_insert() {
 
 	defer db.Close()
 
-	testStatement1 := "SELECT LabReportDate FROM taxi_trips LIMIT 10"
+	testStatement1 := "SELECT LabReportDate FROM daily_covid_cases LIMIT 10"
 	rows, err := db.Query(testStatement1)
 	if err != nil {
 		panic(err)
