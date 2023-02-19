@@ -192,8 +192,7 @@ func test_successful_insert() {
 func main() {
 
 	GetAPIrequest(url)
-
-	fmt.Printf("%v", Reports)
+	// fmt.Printf("%v", Reports)
 
 	// Putting this here to eliminate making API calls over and over while testing
 	// SaveTripsJSON("reports.json")
@@ -205,12 +204,12 @@ func main() {
 	// LessReports := Reports[0:1000]
 
 	// Drop and re-create table
-	// refresh_db_table()
+	refresh_db_table()
 
 	// Ingest records to DB
-	// load_to_db(LessReports)
+	load_to_db(Reports)
 
 	// Query DB to confirm
-	// test_successful_insert()
+	test_successful_insert()
 
 }

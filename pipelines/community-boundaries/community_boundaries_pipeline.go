@@ -194,15 +194,6 @@ func main() {
 	GetAPIrequest(url)
 	// fmt.Printf("%v", Boundaries)
 
-	// Putting this here to eliminate making API calls over and over while testing
-	// SaveTripsJSON("reports.json")
-
-	// Loading from json file to avoid unnecessary API calls
-	// LoadTripsJSON("reports.json")
-
-	// reducing file size to manage Google Cloud credit consumption
-	// LessReports := Reports[0:1000]
-
 	// Drop and re-create table
 	refresh_db_table()
 
