@@ -289,21 +289,21 @@ func main() {
 	GetAPIrequest(url)
 
 	// Putting this here to eliminate making API calls over and over while testing
-	SaveTripsJSON("reports.json")
+	// SaveTripsJSON("reports.json")
 
 	// Loading from json file to avoid unnecessary API calls
-	LoadTripsJSON("reports.json")
+	// LoadTripsJSON("reports.json")
 
 	// reducing file size to manage Google Cloud credit consumption
-	// LessReports := Reports[0:1000]
+	LessReports := Reports[0:1000]
 
 	// Drop and re-create table
-	// refresh_db_table()
+	refresh_db_table()
 
 	// Ingest records to DB
-	// load_to_db(LessReports)
+	load_to_db(LessReports)
 
 	// Query DB to confirm
-	// test_successful_insert()
+	test_successful_insert()
 
 }
