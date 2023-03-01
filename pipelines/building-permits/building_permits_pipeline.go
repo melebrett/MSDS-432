@@ -105,7 +105,7 @@ func DbConnect() (*sql.DB, error) {
 	}
 
 	HOST := os.Getenv("HOST")
-	PORT := os.Getenv("PORT")
+	PORT := os.Getenv("DBPORT")
 	USER := os.Getenv("USER")
 	PASSWORD := os.Getenv("PASSWORD")
 	DBNAME := os.Getenv("DBNAME")
@@ -136,7 +136,7 @@ func refresh_db_table() {
 
 	defer db.Close()
 
-	dropTableStatement := "DROP TABLE IF EXISTS buidling_permits;"
+	dropTableStatement := "DROP TABLE IF EXISTS building_permits;"
 
 	_, err = db.Exec(dropTableStatement)
 	if err != nil {
