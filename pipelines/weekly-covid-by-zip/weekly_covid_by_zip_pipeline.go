@@ -23,7 +23,7 @@ type ZipInfo struct {
 	WeekNum               string `json:"week_number"`
 	WeekStart             string `json:"week_start"`
 	WeekEnd               string `json:"week_end"`
-	TestsWeekly           string `json:"test_weekly"`
+	TestsWeekly           string `json:"tests_weekly"`
 	TestsCumulative       string `json:"tests_cumulative"`
 	TestRateWeekly        string `json:"test_rate_weekly"`
 	TestRateCumulative    string `json:"test_rate_cumulative"`
@@ -34,7 +34,10 @@ type ZipInfo struct {
 	DeathRateWeekly       string `json:"death_rate_weekly"`
 	DeathRateCumulative   string `json:"death_rate_cumulative"`
 	Population            string `json:"population"`
-	ZipCodeLocation       string `json:"zip_code_location"`
+	ZipCodeLocation       struct {
+		LocType     string    `json:"type"`
+		Coordinates []float64 `json:"coordinates"`
+	} `json:"zip_code_location"`
 }
 
 var ZipsInfo []ZipInfo
@@ -135,24 +138,25 @@ func refresh_db_table() {
 	}
 
 	createTableStatement := `CREATE TABLE weekly_covid_by_zip (
-						RowId        TEXT PRIMARY KEY,
-						ZipCode TEXT,
-						WeekNum TEXT,
-						WeekStart TEXT,
-						WeekEnd TEXT,
-						TestsWeekly TEXT,
-						TestsCumulative TEXT,
-						TestRateWeekly TEXT,
-						TestRateCumulative TEXT,
-						PctPositiveWeekly TEXT,
-						PctPositiveCumulative TEXT,
-						DeathsWeekly TEXT,
-						DeathsCumulative TEXT,
-						DeathRateWeekly TEXT,
-						DeathRateCumulative TEXT,
-						Population          TEXT,
-						ZipCodeLocation       TEXT
-							);`
+						RowID        				TEXT PRIMARY KEY,
+						ZipCode 				TEXT,
+						WeekNum 				TEXT,
+						WeekStart 				TEXT,
+						WeekEnd 				TEXT,
+						TestsWeekly 			TEXT,
+						TestsCumulative 		TEXT,
+						TestRateWeekly 			TEXT,
+						TestRateCumulative 		TEXT,
+						PctPositiveWeekly 		TEXT,
+						PctPositiveCumulative 	TEXT,
+						DeathsWeekly 			TEXT,
+						DeathsCumulative 		TEXT,
+						DeathRateWeekly 		TEXT,
+						DeathRateCumulative 	TEXT,
+						Population          	TEXT,
+						Latitude       			TEXT,
+						Longitude				TEXT
+						);`
 
 	_, err = db.Exec(createTableStatement)
 	if err != nil {
@@ -168,10 +172,13 @@ func load_to_db(ZipsInfo []ZipInfo) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO daily_covid_cases (RowId,ZipCode,WeekNum,WeekStart,WeekEnd,TestsWeekly,TestsCumulative,TestRateWeekly,TestRateCumulative,PctPositiveWeekly,PctPositiveCumulative,DeathsWeekly,DeathsCumulative,DeathRateWeekly,DeathRateCumulative,Population,ZipCodeLocation	) 
-							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16);`
+	insertStatement := `INSERT INTO weekly_covid_by_zip (RowID, ZipCode, WeekNum, WeekStart, WeekEnd, TestsWeekly, TestsCumulative, TestRateWeekly, TestRateCumulative, PctPositiveWeekly, PctPositiveCumulative, DeathsWeekly, DeathsCumulative, DeathRateWeekly, DeathRateCumulative, Population, Latitude, Longitude)
+	 						values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);`
 
 	for _, v := range ZipsInfo {
+		if len(v.ZipCodeLocation.Coordinates) == 0 {
+			v.ZipCodeLocation.Coordinates = []float64{0, 0}
+		}
 		_, err = db.Exec(insertStatement,
 			v.RowId,
 			v.ZipCode,
@@ -189,10 +196,10 @@ func load_to_db(ZipsInfo []ZipInfo) {
 			v.DeathRateWeekly,
 			v.DeathRateCumulative,
 			v.Population,
-			v.ZipCodeLocation,
-		)
+			v.ZipCodeLocation.Coordinates[0],
+			v.ZipCodeLocation.Coordinates[1])
 		if err != nil {
-			fmt.Printf("Error inserting record, RowId = %v", v.RowId)
+			log.Fatal("Error inserting record, row id:", v.RowId, " - ", err)
 		}
 	}
 }
@@ -205,7 +212,7 @@ func test_successful_insert() {
 
 	defer db.Close()
 
-	testStatement1 := "SELECT RowId FROM weekly_covid_by_zip LIMIT 10"
+	testStatement1 := "SELECT RowID FROM weekly_covid_by_zip LIMIT 10"
 	rows, err := db.Query(testStatement1)
 	if err != nil {
 		panic(err)

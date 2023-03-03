@@ -38,14 +38,14 @@ type CaseReport struct {
 	CasesBlackNonLatinx  string `json:"cases_black_non_latinx"`
 	CasesOtherNonLatinx  string `json:"cases_other_non_latinx"`
 	CasesEthUnk          string `json:"cases_unkown_race_eth"`
-	DeathsAge_0_17       string `json:"deaths_0_17"`
-	DeathsAge_18_29      string `json:"deaths_18_29"`
-	DeathsAge_30_39      string `json:"deaths_30_39"`
-	DeathsAge_40_49      string `json:"deaths_40_49"`
-	DeathsAge_50_59      string `json:"deaths_50_59"`
-	DeathsAge_60_69      string `json:"deaths_60_69"`
-	DeathsAge_70_79      string `json:"deaths_70_79"`
-	DeathsAge_80_        string `json:"deaths_80_yrs"`
+	DeathsAge_0_17_yrs   string `json:"deaths_0_17_yrs"`
+	DeathsAge_18_29_yrs  string `json:"deaths_18_29_yrs"`
+	DeathsAge_30_39_yrs  string `json:"deaths_30_39_yrs"`
+	DeathsAge_40_49_yrs  string `json:"deaths_40_49_yrs"`
+	DeathsAge_50_59_yrs  string `json:"deaths_50_59_yrs"`
+	DeathsAge_60_69_yrs  string `json:"deaths_60_69_yrs"`
+	DeathsAge_70_79_yrs  string `json:"deaths_70_79_yrs"`
+	DeathsAge_80_yrs     string `json:"deaths_80_yrs"`
 	DeathsAgeUnk         string `json:"deaths_unknown_age"`
 	DeathsMale           string `json:"deaths_male"`
 	DeathsFemale         string `json:"deaths_female"`
@@ -153,6 +153,7 @@ func refresh_db_table() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Table dropped")
 
 	createTableStatement := `CREATE TABLE daily_covid_cases (
 						LabReportDate        TEXT,
@@ -175,14 +176,14 @@ func refresh_db_table() {
 						CasesBlackNonLatinx  TEXT,
 						CasesOtherNonLatinx  TEXT,
 						CasesEthUnk          TEXT,
-						DeathsAge_0_17       TEXT,
-						DeathsAge_18_29      TEXT,
-						DeathsAge_30_39      TEXT,
-						DeathsAge_40_49      TEXT,
-						DeathsAge_50_59      TEXT,
-						DeathsAge_60_69      TEXT,
-						DeathsAge_70_79      TEXT,
-						DeathsAge_80         TEXT,
+						DeathsAge_0_17_yrs       TEXT,
+						DeathsAge_18_29_yrs      TEXT,
+						DeathsAge_30_39_yrs      TEXT,
+						DeathsAge_40_49_yrs      TEXT,
+						DeathsAge_50_59_yrs      TEXT,
+						DeathsAge_60_69_yrs      TEXT,
+						DeathsAge_70_79_yrs      TEXT,
+						DeathsAge_80_yrs         TEXT,
 						DeathsAgeUnk         TEXT,
 						DeathsMale           TEXT,
 						DeathsFemale         TEXT,
@@ -198,6 +199,7 @@ func refresh_db_table() {
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Table re-created")
 }
 
 func load_to_db(Reports []CaseReport) {
@@ -208,8 +210,8 @@ func load_to_db(Reports []CaseReport) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO daily_covid_cases (LabReportDate, CasesTotal, DeathsTotal, CasesAge_0_17, CasesAge_18_29, CasesAge_30_39, CasesAge_40_49, CasesAge_50_59, CasesAge_60_69, CasesAge_70_79, CasesAge_80_, CasesAgeUnk, CasesMale, CasesFemale, CasesGenderUnk, CasesLatinx, CasesAsianNonLatinx, CasesBlackNonLatinx, CasesOtherNonLatinx, CasesEthUnk, DeathsAge_0_17, DeathsAge_18_29, DeathsAge_30_39, DeathsAge_40_49, DeathsAge_50_59, DeathsAge_60_69, DeathsAge_70_79, DeathsAge_80_, DeathsAgeUnk, DeathsMale, DeathsFemale, DeathsGenderUnk, DeathsLatinx, DeathsAsianNonLatinx, DeathsBlackNonLatinx, DeathsOtherNonLatinx, DeathsEthUnk) 
-							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36);`
+	insertStatement := `INSERT INTO daily_covid_cases (LabReportDate, CasesTotal, DeathsTotal, CasesAge_0_17, CasesAge_18_29, CasesAge_30_39, CasesAge_40_49, CasesAge_50_59, CasesAge_60_69, CasesAge_70_79, CasesAge_80_, CasesAgeUnk, CasesMale, CasesFemale, CasesGenderUnk, CasesLatinx, CasesAsianNonLatinx, CasesBlackNonLatinx, CasesOtherNonLatinx, CasesEthUnk, DeathsAge_0_17_yrs, DeathsAge_18_29_yrs, DeathsAge_30_39_yrs, DeathsAge_40_49_yrs, DeathsAge_50_59_yrs, DeathsAge_60_69_yrs, DeathsAge_70_79_yrs, DeathsAge_80_yrs, DeathsAgeUnk, DeathsMale, DeathsFemale, DeathsGenderUnk, DeathsLatinx, DeathsAsianNonLatinx, DeathsBlackNonLatinx, DeathsOtherNonLatinx, DeathsEthUnk)
+							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37);`
 
 	for _, v := range Reports {
 		_, err = db.Exec(insertStatement,
@@ -233,14 +235,14 @@ func load_to_db(Reports []CaseReport) {
 			v.CasesBlackNonLatinx,
 			v.CasesOtherNonLatinx,
 			v.CasesEthUnk,
-			v.DeathsAge_0_17,
-			v.DeathsAge_18_29,
-			v.DeathsAge_30_39,
-			v.DeathsAge_40_49,
-			v.DeathsAge_50_59,
-			v.DeathsAge_60_69,
-			v.DeathsAge_70_79,
-			v.DeathsAge_80_,
+			v.DeathsAge_0_17_yrs,
+			v.DeathsAge_18_29_yrs,
+			v.DeathsAge_30_39_yrs,
+			v.DeathsAge_40_49_yrs,
+			v.DeathsAge_50_59_yrs,
+			v.DeathsAge_60_69_yrs,
+			v.DeathsAge_70_79_yrs,
+			v.DeathsAge_80_yrs,
 			v.DeathsAgeUnk,
 			v.DeathsMale,
 			v.DeathsFemale,
@@ -249,10 +251,9 @@ func load_to_db(Reports []CaseReport) {
 			v.DeathsAsianNonLatinx,
 			v.DeathsBlackNonLatinx,
 			v.DeathsOtherNonLatinx,
-			v.DeathsEthUnk,
-		)
+			v.DeathsEthUnk)
 		if err != nil {
-			fmt.Printf("Error inserting record, ReportDate = %v", v.LabReportDate)
+			log.Fatal("Error inserting record, ReportDate: ", v.LabReportDate)
 		}
 	}
 }
