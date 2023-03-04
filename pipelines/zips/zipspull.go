@@ -84,7 +84,7 @@ func DbConnect() (*sql.DB, error) {
 	}
 
 	HOST := os.Getenv("HOST")
-	PORT := os.Getenv("PORT")
+	PORT := os.Getenv("DBPORT")
 	USER := os.Getenv("USER")
 	PASSWORD := os.Getenv("PASSWORD")
 	DBNAME := os.Getenv("DBNAME")
