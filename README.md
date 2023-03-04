@@ -2,7 +2,7 @@
 
 ### Microservices (Checkpoint #3 - Requirement 1)
 ##### Data Lake Pipelines
-/pipelines
+src/pipelines
 <ol>
     <li>building-permits</li>
     <li>community-boundaries</li>
@@ -16,7 +16,7 @@
 </ol>
 
 ##### Data Processing Microservices
-/services
+src/services
 <ol>
     <li>requirement_1-covid-taxi-alerts</li>
     <li>requirement_2-airport_trips</li>
