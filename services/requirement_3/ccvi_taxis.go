@@ -16,15 +16,19 @@ import (
 )
 
 type TaxiTrips struct {
-	TripID             string
-	TaxiID             string
-	TripStartTimestamp time.Time
-	PickupLatitude     float64
-	PickupLongitude    float64
-	DropoffLatitude    float64
-	DropoffLongitude   float64
-	PickupLocationName string
-	DropoffZipCode     int
+	TripID              string
+	TaxiID              string
+	TripStartTimestamp  time.Time
+	PickupLatitude      float64
+	PickupLongitude     float64
+	DropoffLatitude     float64
+	DropoffLongitude    float64
+	PickupZipCode       int
+	DropoffZipCode      int
+	PickupCCVIScore     float64
+	PickupCCVICategory  string
+	DropoffCCVIScore    float64
+	DropoffCCVICategory string
 }
 
 type Nominatim struct {
@@ -35,6 +39,14 @@ type Nominatim struct {
 	Boundingbox []string         `json:"boundingbox"`
 }
 
+type CCVI struct {
+	GeoType            string
+	CommunityAreaOrZip int
+	CommunityAreaName  string
+	CCVIScore          float64
+	CCVICategory       string
+}
+
 type NominatimAddress struct {
 	HomeNumber    int    `json:"house_number"`
 	Road          string `json:"road"`
@@ -43,11 +55,11 @@ type NominatimAddress struct {
 	City          string `json:"city"`
 	Municipality  string `json:"municipality"`
 	County        string `json:"county"`
-	Postcode      string `json:"postcode"`
+	Postcode      int    `json:"postcode,string"`
 }
 
 var Trips []TaxiTrips
-var AirportTrips []TaxiTrips
+var CCVIrecords []CCVI
 
 func DLConnect() (*sql.DB, error) {
 	//Retreiving DB connection credential environment variables
@@ -104,6 +116,11 @@ func String2Float(s string) float64 {
 	return value
 }
 
+func String2Int(s string) int {
+	value, _ := strconv.Atoi(s)
+	return value
+}
+
 func String2Timestamp(s string) time.Time {
 	// '2023-01-01T00:00:00.000'
 	const format = "2006-01-02T15:04:05.000"
@@ -126,7 +143,7 @@ func query_taxis() []TaxiTrips {
 
 	rows, err := db.Query(statement)
 	if err != nil {
-		log.Fatal("Error querying database: ", err)
+		log.Fatal("Error querying database for taxis: ", err)
 	}
 
 	Data := []TaxiTrips{}
@@ -153,39 +170,44 @@ func query_taxis() []TaxiTrips {
 	return Data
 }
 
-func GetLocationName(userAgent string, lat, lon float64) string {
-	var myresults Nominatim
-	url := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%f&lon=%f", lat, lon)
-	req, err := http.NewRequest("GET", url, nil)
+func query_ccvi() []CCVI {
+	db, err := DLConnect()
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
 
-	req.Header.Set("User-Agent", userAgent)
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	defer db.Close()
 
+	statement := `SELECT geo_type, community_area_or_zip, community_area_name, ccvi_score, ccvi_category FROM covid_vulnerability`
+
+	rows, err := db.Query(statement)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal("Error querying database for ccvi: ", err)
 	}
 
-	defer resp.Body.Close()
+	Data := []CCVI{}
 
-	if resp.StatusCode != 200 {
-		fmt.Println(resp.StatusCode)
+	for rows.Next() {
+		var geotype string
+		var communityareazip string
+		var communityareaname string
+		var ccviscore string
+		var ccvicategory string
+		err = rows.Scan(&geotype, &communityareazip, &communityareaname, &ccviscore, &ccvicategory)
+		if err != nil {
+			log.Fatal("Scan error", err)
+		}
+		temp := CCVI{GeoType: geotype, CommunityAreaOrZip: String2Int(communityareazip), CommunityAreaName: communityareaname, CCVIScore: String2Float(ccviscore), CCVICategory: ccvicategory}
+
+		Data = append(Data, temp)
 	}
 
-	resBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println(err)
-	}
+	defer rows.Close()
 
-	json.Unmarshal(resBody, &myresults)
-
-	return myresults.DisplayName
+	return Data
 }
 
-func GetZipCode(userAgent string, lat, lon float64) string {
+func GetZipCode(userAgent string, lat, lon float64) int {
 	var myresults Nominatim
 	url := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%f&lon=%f", lat, lon)
 	req, err := http.NewRequest("GET", url, nil)
@@ -206,17 +228,12 @@ func GetZipCode(userAgent string, lat, lon float64) string {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-
 		fmt.Println(resp.StatusCode)
-
 	}
 
 	resBody, err := ioutil.ReadAll(resp.Body)
-
 	if err != nil {
-
 		fmt.Println(err)
-
 	}
 
 	json.Unmarshal(resBody, &myresults)
@@ -232,23 +249,27 @@ func CreateDataMartTable() {
 
 	defer db.Close()
 
-	dropTableStatement := "DROP TABLE IF EXISTS requirement_2_airport_trips;"
+	dropTableStatement := "DROP TABLE IF EXISTS requirement_3_ccvi_alerts;"
 
 	_, err = db.Exec(dropTableStatement)
 	if err != nil {
 		panic(err)
 	}
 
-	createTableStatement := `CREATE TABLE requirement_2_airport_trips (
+	createTableStatement := `CREATE TABLE requirement_3_ccvi_alerts (
 								TripID               TEXT PRIMARY KEY,
 								TaxiID               TEXT,
 								TripStartTimestamp   TIMESTAMPTZ,
 								PickupLatitude       FLOAT,
 								PickupLongitude      FLOAT,
-								PickupLocationName	 TEXT,
 								DropoffLatitude      FLOAT,
 								DropoffLongitude     FLOAT,
-								DropoffZipCode       INTEGER
+								PickupZipCode		 INTEGER,
+								DropoffZipCode       INTEGER,
+								PickupCCVIscore		 FLOAT,
+								PickupCCVIcategory	 TEXT,
+								DropoffCCVIscore	 FLOAT,
+								DropoffCCVIcategory  TEXT
 							);`
 
 	_, err = db.Exec(createTableStatement)
@@ -257,7 +278,7 @@ func CreateDataMartTable() {
 	}
 }
 
-func LoadToDataMart(tripRecords []TaxiTrips) {
+func LoadToDataMart(TaxisCCVI []TaxiTrips) {
 	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
@@ -265,13 +286,13 @@ func LoadToDataMart(tripRecords []TaxiTrips) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO requirement_2_airport_trips (TripID, TaxiID, TripStartTimestamp, PickupLatitude, PickupLongitude, PickupLocationName, DropoffLatitude,	DropoffLongitude, DropoffZipCode) 
-							values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	insertStatement := `INSERT INTO requirement_3_ccvi_alerts (TripID, TaxiID, TripStartTimestamp, PickupLatitude, PickupLongitude, DropoffLatitude, DropoffLongitude, PickupZipCode, DropoffZipCode, PickupCCVIscore, PickupCCVIcategory, DropoffCCVIscore, DropoffCCVIcategory) 
+							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 							ON CONFLICT (TripID) 
 							DO NOTHING;`
 
-	for _, v := range tripRecords {
-		_, err = db.Exec(insertStatement, v.TripID, v.TaxiID, v.TripStartTimestamp, v.PickupLatitude, v.PickupLongitude, v.PickupLocationName, v.DropoffLatitude, v.DropoffLongitude, v.DropoffZipCode)
+	for _, v := range TaxisCCVI {
+		_, err = db.Exec(insertStatement, v.TripID, v.TaxiID, v.TripStartTimestamp, v.PickupLatitude, v.PickupLongitude, v.DropoffLatitude, v.DropoffLongitude, v.PickupZipCode, v.DropoffZipCode, v.PickupCCVIScore, v.PickupCCVICategory, v.DropoffCCVIScore, v.DropoffCCVICategory)
 		if err != nil {
 			log.Println("Error inserting record, TripID = ", v.TripID, err)
 		}
@@ -286,7 +307,7 @@ func TestInsertion() {
 
 	defer db.Close()
 
-	testStatement1 := "SELECT DropoffZipCode FROM requirement_2_airport_trips LIMIT 10"
+	testStatement1 := "SELECT DropoffCCVIscore FROM requirement_3_ccvi_alerts LIMIT 50"
 	rows, err := db.Query(testStatement1)
 	if err != nil {
 		panic(err)
@@ -295,43 +316,58 @@ func TestInsertion() {
 	defer rows.Close()
 
 	for rows.Next() {
-		var testzipcode string
-		err = rows.Scan(&testzipcode)
+		var testccvi string
+		err = rows.Scan(&testccvi)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(testzipcode)
+		fmt.Println(testccvi)
 	}
 }
 
 func main() {
+	// Query CCVI records, parse for zip code records to match to taxi trips
+	CCVIrecords = query_ccvi()
+	parsedCCVIrecords := []CCVI{}
+
+	for _, v := range CCVIrecords {
+		if v.GeoType == "ZIP" {
+			parsedCCVIrecords = append(parsedCCVIrecords, v)
+		}
+	}
+
+	// Query taxi dataset
 	Trips = query_taxis()
 
-	// Reverse geocode to return pickup location name. If location name matches one of the airports, add those records to new slice
-	for _, v := range Trips {
-		LocationName := GetLocationName("msds432-final-group-4", v.PickupLatitude, v.PickupLongitude)
+	// For taxi trips, reverse geocode to get pickup and dropoff zip codes, link zip codes to relevant CCVI score, and update struct fields
+	for i := 0; i < len(Trips); i++ {
+		record := &Trips[i]
+		// pickup zip code
+		pickupzip := GetZipCode("msds432-final-group-4", record.PickupLatitude, record.PickupLongitude)
 
-		if LocationName == "O'Hare International Airport, 10000, Perimeter Road, O'Hare, Chicago, Jefferson Township, Cook County, Illinois, 60666, United States" || LocationName == "Lot A, O'Hare Commercial Departure, O'Hare, Chicago, Jefferson Township, Cook County, Illinois, 60666, United States" || LocationName == "Chicago Midway International Airport, 5700, South Cicero Avenue, Chicago, Illinois, 60638, United States" {
-			v.PickupLocationName = LocationName
-			AirportTrips = append(AirportTrips, v)
+		record.PickupZipCode = pickupzip
+
+		// dropoff zip code
+		dropoffzip := GetZipCode("msds432-final-group-4", record.DropoffLatitude, record.DropoffLongitude)
+
+		record.DropoffZipCode = dropoffzip
+
+		for _, v := range parsedCCVIrecords {
+			if v.CommunityAreaOrZip == record.PickupZipCode {
+				record.PickupCCVIScore = v.CCVIScore
+				record.PickupCCVICategory = v.CCVICategory
+			}
+
+			if v.CommunityAreaOrZip == record.DropoffZipCode {
+				record.DropoffCCVIScore = v.CCVIScore
+				record.DropoffCCVICategory = v.CCVICategory
+			}
 		}
 	}
 
-	// For trips from airport, reverse geocode to get dropoff zip code and update struct with zipcode field
-	for i := 0; i < len(AirportTrips); i++ {
-		record := &AirportTrips[i]
-		zip, err := strconv.Atoi(GetZipCode("msds432-final-group-4", record.DropoffLatitude, record.DropoffLongitude))
-		if err != nil {
-			log.Println("Error converting zip to integer: ", err)
-		}
-		record.DropoffZipCode = zip
-	}
-
-	// Insert to Data Mart
 	CreateDataMartTable()
 
-	LoadToDataMart(AirportTrips)
+	LoadToDataMart(Trips)
 
-	// // Testing successful ingestion to Data Mart
 	// TestInsertion()
 }
