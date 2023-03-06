@@ -66,6 +66,7 @@ func DLConnect() (*sql.DB, error) {
 	db, err := sql.Open("postgres", DB_DSN)
 
 	if err != nil {
+		log.Fatal("Failed to connect to Data Lake")
 		return nil, err
 	}
 
@@ -91,6 +92,7 @@ func DMConnect() (*sql.DB, error) {
 	db, err := sql.Open("postgres", DB_DSN)
 
 	if err != nil {
+		log.Fatal("Failed to connect to Data Mart")
 		return nil, err
 	}
 
