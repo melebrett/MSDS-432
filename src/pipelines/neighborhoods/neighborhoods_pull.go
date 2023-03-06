@@ -18,7 +18,10 @@ const url = "https://data.cityofchicago.org/resource/y6yq-dbs2.json"
 
 // Define struct for individual records
 type Neighborhoods struct {
-	theGeom    string `json:"thegeom"`
+	TheGeom struct {
+		GeoType     string          `json:"type"`
+		Coordinates [][][][]float64 `json:"coordinates"`
+	} `json:"the_geom"`
 	PRI_NEIGH  string `json:"pri_neigh"`
 	SEC_NEIGH  string `json:"sec_neigh"`
 	SHAPE_AREA string `json:"shape_area"`
@@ -34,7 +37,6 @@ func GetAPIrequest(url string) []Neighborhoods {
 	}
 	defer resp.Body.Close()
 
-	// TESTING PRINT
 	fmt.Println("API request completed")
 
 	body, err := io.ReadAll(resp.Body)
@@ -46,7 +48,7 @@ func GetAPIrequest(url string) []Neighborhoods {
 	fmt.Println("Response read successfully")
 
 	if err := json.Unmarshal(body, &Neighs); err != nil {
-		fmt.Printf("Cannot unmarshal JSON: %v ", err)
+		log.Printf("Cannot unmarshal JSON: %v ", err)
 	}
 
 	return Neighs
@@ -123,7 +125,9 @@ func refresh_db_table() {
 	}
 
 	createTableStatement := `CREATE TABLE neighborhoods (
-								TheGeom                 TEXT PRIMARY KEY,
+								GeoType                 TEXT,
+								Latitude				TEXT,
+								Longitude				TEXT,
 								PRI_NEIGH               TEXT,
 								SEC_NEIGH			    TEXT,
 								SHAPE_AREA        		TEXT,
@@ -144,16 +148,17 @@ func load_to_db(Neighs []Neighborhoods) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO neighborhoods (TheGeom, PRI_NEIGH, SEC_NEIGH, SHAPE_AREA, SHAPE_LEN) 
-							values ($1, $2, $3, $4, $5)
-							ON CONFLICT (TheGeom) 
-							DO NOTHING;`
+	insertStatement := `INSERT INTO neighborhoods (GeoType, Latitude, Longitude, PRI_NEIGH, SEC_NEIGH, SHAPE_AREA, SHAPE_LEN) 
+							values ($1, $2, $3, $4, $5, $6, $7);`
 
 	for _, v := range Neighs {
-		_, err = db.Exec(insertStatement, v.theGeom, v.PRI_NEIGH, v.SEC_NEIGH, v.SHAPE_AREA, v.SHAPE_LEN)
-		if err != nil {
-			fmt.Printf("Error inserting record, theGeom = %v", v.theGeom)
+		for _, val := range v.TheGeom.Coordinates[0][0] {
+			_, err = db.Exec(insertStatement, v.TheGeom.GeoType, val[0], val[1], v.PRI_NEIGH, v.SEC_NEIGH, v.SHAPE_AREA, v.SHAPE_LEN)
+			if err != nil {
+				fmt.Printf("Error inserting record, theGeom = %v", v.TheGeom)
+			}
 		}
+
 	}
 }
 
@@ -165,7 +170,7 @@ func test_successful_insert() {
 
 	defer db.Close()
 
-	testStatement1 := "SELECT SHAPE_AREA FROM neighborhoods LIMIT 10"
+	testStatement1 := "SELECT PRI_NEIGH FROM neighborhoods LIMIT 10"
 	rows, err := db.Query(testStatement1)
 	if err != nil {
 		panic(err)
