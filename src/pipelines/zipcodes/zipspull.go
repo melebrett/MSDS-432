@@ -18,7 +18,10 @@ const url = "https://data.cityofchicago.org/resource/unjd-c2ca.json"
 
 // Define struct for individual records
 type Zipcodes struct {
-	theGeom    string //`json:"thegeom"`
+	TheGeom struct {
+		GeoType     string          `json:"type"`
+		Coordinates [][][][]float64 `json:"coordinates"`
+	} `json:"the_geom"`
 	OBJECTID   string `json:"objectid"`
 	ZIP        string `json:"zip"`
 	SHAPE_AREA string `json:"shape_area"`
@@ -123,7 +126,9 @@ func refresh_db_table() {
 	}
 
 	createTableStatement := `CREATE TABLE Zipcodes (
-								TheGeom                 TEXT PRIMARY KEY,
+								GeoType                 TEXT,
+								Latitude				TEXT,
+								LONGITUDE				TEXT,
 								OBJECTID                TEXT,
 								ZIP 				    TEXT,
 								SHAPE_AREA        		TEXT,
@@ -144,15 +149,15 @@ func load_to_db(Zips []Zipcodes) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO Zipcodes (TheGeom, OBJECTID, ZIP, SHAPE_AREA, SHAPE_LEN) 
-							values ($1, $2, $3, $4, $5)
-							ON CONFLICT (TheGeom) 
-							DO NOTHING;`
+	insertStatement := `INSERT INTO Zipcodes (GeoType, Latitude, Longitude, OBJECTID, ZIP, SHAPE_AREA, SHAPE_LEN) 
+							values ($1, $2, $3, $4, $5, $6, $7);`
 
 	for _, v := range Zips {
-		_, err = db.Exec(insertStatement, v.theGeom, v.OBJECTID, v.ZIP, v.SHAPE_AREA, v.SHAPE_LEN)
-		if err != nil {
-			fmt.Printf("Error inserting record, theGeom = %v", v.theGeom)
+		for _, val := range v.TheGeom.Coordinates[0][0] {
+			_, err = db.Exec(insertStatement, v.TheGeom.GeoType, val[0], val[1], v.OBJECTID, v.ZIP, v.SHAPE_AREA, v.SHAPE_LEN)
+			if err != nil {
+				log.Printf("Error inserting record, Zipcode = %v; %v\n", v.ZIP, err)
+			}
 		}
 	}
 }
@@ -174,12 +179,12 @@ func test_successful_insert() {
 	defer rows.Close()
 
 	for rows.Next() {
-		var TheGeom string
-		err = rows.Scan(&TheGeom)
+		var Zip string
+		err = rows.Scan(&Zip)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(TheGeom)
+		fmt.Println(Zip)
 	}
 }
 
