@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 
-	"github.com/joho/godotenv"
+	"cloud.google.com/go/cloudsqlconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/stdlib"
 	_ "github.com/lib/pq"
 )
 
@@ -77,34 +81,42 @@ func LoadTripsJSON(filename string) {
 }
 
 func DbConnect() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	if err != nil {
-		fmt.Println("Could not load .env file")
+	mustGetenv := func(k string) string {
+		v := os.Getenv(k)
+		if v == "" {
+			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
+		}
+		return v
 	}
 
-	HOST := os.Getenv("HOST")
-	PORT := os.Getenv("DBPORT")
-	USER := os.Getenv("USER")
-	PASSWORD := os.Getenv("PASSWORD")
-	DBNAME := os.Getenv("DBNAME")
+	var (
+		dbUser                 = mustGetenv("USER")     // e.g. 'my-db-user'
+		dbPwd                  = mustGetenv("PASSWORD") // e.g. 'my-db-password'
+		dbName                 = mustGetenv("DBNAME")   // e.g. 'my-database'
+		instanceConnectionName = mustGetenv("INSTANCE") // e.g. 'project:region:instance'
+	)
 
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
-
-	db, err := sql.Open("postgres", DB_DSN)
-
+	dsn := fmt.Sprintf("user=%s password=%s database=%s", dbUser, dbPwd, dbName)
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-
-	// err = db.Ping()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	fmt.Println("Successfully connected to DB")
-
-	return db, nil
+	var opts []cloudsqlconn.Option
+	d, err := cloudsqlconn.NewDialer(context.Background(), opts...)
+	if err != nil {
+		return nil, err
+	}
+	// Use the Cloud SQL connector to handle connecting to the instance.
+	// This approach does *NOT* require the Cloud SQL proxy.
+	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
+		return d.Dial(ctx, instanceConnectionName)
+	}
+	dbURI := stdlib.RegisterConnConfig(config)
+	dbPool, err := sql.Open("pgx", dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("sql.Open: %v", err)
+	}
+	return dbPool, nil
 }
 
 func refresh_db_table() {
