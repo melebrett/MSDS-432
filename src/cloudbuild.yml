@@ -1,0 +1,16 @@
+#cloudbuild.yaml
+steps:
+- name: 'docker/compose:1.28.2'
+  args: [
+    '-f', './docker-compose.yml', 
+    'build', 
+    'postgres'
+  ]
+
+# Step 2: Push the container image to Container Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    '--debug',
+    'push', 
+    'gcr.io/msds-432-374718/postgres'
+  ]
