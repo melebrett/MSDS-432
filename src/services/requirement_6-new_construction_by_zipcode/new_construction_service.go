@@ -228,4 +228,6 @@ func main() {
 
 	CommunityHealth := queryCommunityHealth()
 
+	// Need to map communities to zipcodes and join with building permits. Then filter for lowest new build permits and and per capita income <$30,000
+
 }

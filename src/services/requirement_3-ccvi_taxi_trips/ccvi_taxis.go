@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"github.com/joho/godotenv"
+	"cloud.google.com/go/cloudsqlconn"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/stdlib"
 	_ "github.com/lib/pq"
 )
 
@@ -62,53 +66,81 @@ var Trips []TaxiTrips
 var CCVIrecords []CCVI
 
 func DLConnect() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	var DLHOST = os.Getenv("DLHOST")
-	var DLPORT = os.Getenv("DLPORT")
-	var DLUSER = os.Getenv("DLUSER")
-	var DLPASSWORD = os.Getenv("DLPASSWORD")
-	var DLDBNAME = os.Getenv("DLDBNAME")
-	if err != nil {
-		log.Println("Could not load .env file")
+	mustGetenv := func(k string) string {
+		v := os.Getenv(k)
+		if v == "" {
+			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
+		}
+		return v
 	}
 
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DLHOST, DLPORT, DLUSER, DLPASSWORD, DLDBNAME)
+	var (
+		dbUser                 = mustGetenv("DLUSER")     // e.g. 'my-db-user'
+		dbPwd                  = mustGetenv("DLPASSWORD") // e.g. 'my-db-password'
+		dbName                 = mustGetenv("DLDBNAME")   // e.g. 'my-database'
+		instanceConnectionName = mustGetenv("DLINSTANCE") // e.g. 'project:region:instance'
+	)
 
-	db, err := sql.Open("postgres", DB_DSN)
-
+	dsn := fmt.Sprintf("user=%s password=%s database=%s", dbUser, dbPwd, dbName)
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println("Successfully connected to Data Lake")
-
-	return db, nil
+	var opts []cloudsqlconn.Option
+	d, err := cloudsqlconn.NewDialer(context.Background(), opts...)
+	if err != nil {
+		return nil, err
+	}
+	// Use the Cloud SQL connector to handle connecting to the instance.
+	// This approach does *NOT* require the Cloud SQL proxy.
+	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
+		return d.Dial(ctx, instanceConnectionName)
+	}
+	dbURI := stdlib.RegisterConnConfig(config)
+	dbPool, err := sql.Open("pgx", dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("sql.Open: %v", err)
+	}
+	return dbPool, nil
 }
 
 func DMConnect() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	var DMHOST = os.Getenv("DMHOST")
-	var DMPORT = os.Getenv("DMPORT")
-	var DMUSER = os.Getenv("DMUSER")
-	var DMPASSWORD = os.Getenv("DMPASSWORD")
-	var DMDBNAME = os.Getenv("DMDBNAME")
-	if err != nil {
-		log.Println("Could not load .env file")
+	mustGetenv := func(k string) string {
+		v := os.Getenv(k)
+		if v == "" {
+			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
+		}
+		return v
 	}
 
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DMHOST, DMPORT, DMUSER, DMPASSWORD, DMDBNAME)
+	var (
+		dbUser                 = mustGetenv("DMUSER")     // e.g. 'my-db-user'
+		dbPwd                  = mustGetenv("DMPASSWORD") // e.g. 'my-db-password'
+		dbName                 = mustGetenv("DMDBNAME")   // e.g. 'my-database'
+		instanceConnectionName = mustGetenv("DMINSTANCE") // e.g. 'project:region:instance'
+	)
 
-	db, err := sql.Open("postgres", DB_DSN)
-
+	dsn := fmt.Sprintf("user=%s password=%s database=%s", dbUser, dbPwd, dbName)
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println("Successfully connected to Data Mart")
-
-	return db, nil
+	var opts []cloudsqlconn.Option
+	d, err := cloudsqlconn.NewDialer(context.Background(), opts...)
+	if err != nil {
+		return nil, err
+	}
+	// Use the Cloud SQL connector to handle connecting to the instance.
+	// This approach does *NOT* require the Cloud SQL proxy.
+	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
+		return d.Dial(ctx, instanceConnectionName)
+	}
+	dbURI := stdlib.RegisterConnConfig(config)
+	dbPool, err := sql.Open("pgx", dbURI)
+	if err != nil {
+		return nil, fmt.Errorf("sql.Open: %v", err)
+	}
+	return dbPool, nil
 }
 
 func String2Float(s string) float64 {
