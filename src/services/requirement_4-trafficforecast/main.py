@@ -16,7 +16,7 @@ def main():
     PWD = os.getenv('PASSWORD')
     LAKE = os.getenv('LAKE')
     MART = os.getenv('MART')
-    PORT = os.getenv('PORT')
+    PORT = os.getenv('DBPORT')
     DB = os.getenv('DBNAME')
 
     connection_string = f"postgresql+psycopg2://{USER}:%s@{LAKE}:{PORT}/{DB}"
