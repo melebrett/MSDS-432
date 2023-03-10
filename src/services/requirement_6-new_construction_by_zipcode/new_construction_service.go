@@ -50,18 +50,27 @@ var Permits []BuildingPermit
 var CommunityData []Community
 
 func DLConnect() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	var DLHOST = os.Getenv("DLHOST")
-	var DLPORT = os.Getenv("DLPORT")
-	var DLUSER = os.Getenv("DLUSER")
-	var DLPASSWORD = os.Getenv("DLPASSWORD")
-	var DLDBNAME = os.Getenv("DLDBNAME")
-	if err != nil {
-		log.Println("Could not load .env file")
+	mustGetenv := func(k string) string {
+		v := os.Getenv(k)
+		if v == "" {
+			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
+		}
+		return v
 	}
 
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DLHOST, DLPORT, DLUSER, DLPASSWORD, DLDBNAME)
+	//Retreiving DB connection credential environment variables
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println("Could not load .env file")
+	}
+
+	HOST := mustGetenv("DLHOST")
+	PORT := mustGetenv("DLDBPORT")
+	USER := mustGetenv("DLUSER")
+	PASSWORD := mustGetenv("DLPASSWORD")
+	DBNAME := mustGetenv("DLDBNAME")
+
+	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
 
 	db, err := sql.Open("postgres", DB_DSN)
 
@@ -69,24 +78,38 @@ func DLConnect() (*sql.DB, error) {
 		return nil, err
 	}
 
-	log.Println("Successfully connected to Data Lake")
+	// err = db.Ping()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	log.Printf("DB %v. Type %T", db, db)
 
 	return db, nil
 }
 
 func DMConnect() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	var DMHOST = os.Getenv("DMHOST")
-	var DMPORT = os.Getenv("DMPORT")
-	var DMUSER = os.Getenv("DMUSER")
-	var DMPASSWORD = os.Getenv("DMPASSWORD")
-	var DMDBNAME = os.Getenv("DMDBNAME")
-	if err != nil {
-		log.Println("Could not load .env file")
+	mustGetenv := func(k string) string {
+		v := os.Getenv(k)
+		if v == "" {
+			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
+		}
+		return v
 	}
 
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DMHOST, DMPORT, DMUSER, DMPASSWORD, DMDBNAME)
+	//Retreiving DB connection credential environment variables
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println("Could not load .env file")
+	}
+
+	HOST := mustGetenv("DMHOST")
+	PORT := mustGetenv("DMDBPORT")
+	USER := mustGetenv("DMUSER")
+	PASSWORD := mustGetenv("DMPASSWORD")
+	DBNAME := mustGetenv("DMDBNAME")
+
+	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
 
 	db, err := sql.Open("postgres", DB_DSN)
 
@@ -94,7 +117,12 @@ func DMConnect() (*sql.DB, error) {
 		return nil, err
 	}
 
-	log.Println("Successfully connected to Data Mart")
+	// err = db.Ping()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	log.Printf("DB %v. Type %T", db, db)
 
 	return db, nil
 }

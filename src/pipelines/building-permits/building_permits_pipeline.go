@@ -14,12 +14,11 @@ import (
 	"cloud.google.com/go/cloudsqlconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 // API endpoint URL
-const url = "https://data.cityofchicago.org/resource/building-permits.json"
+const url = "https://data.cityofchicago.org/resource/building-permits.json?$limit=50000"
 
 // Define struct for individual records
 type BuildingPermit struct {
@@ -100,45 +99,6 @@ func LoadTripsJSON(filename string) {
 	if err != nil {
 		log.Fatalf("Error while unmarshaling json to struct: %v", err)
 	}
-}
-
-func DbConnect() (*sql.DB, error) {
-	mustGetenv := func(k string) string {
-		v := os.Getenv(k)
-		if v == "" {
-			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
-		}
-		return v
-	}
-
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	if err != nil {
-		fmt.Println("Could not load .env file")
-	}
-
-	HOST := mustGetenv("HOST")
-	PORT := mustGetenv("DBPORT")
-	USER := mustGetenv("USER")
-	PASSWORD := mustGetenv("PASSWORD")
-	DBNAME := mustGetenv("DBNAME")
-
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
-
-	db, err := sql.Open("postgres", DB_DSN)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// err = db.Ping()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	log.Printf("DB %v. Type %T", db, db)
-
-	return db, nil
 }
 
 func DbConnect2() (*sql.DB, error) {
@@ -286,14 +246,11 @@ func main() {
 	// // Loading from json file to avoid unnecessary API calls
 	// LoadTripsJSON("taxi_trips.json")
 
-	// reducing file size to manage Google Cloud credit consumption
-	LessPermits := Permits[0:1000]
-
 	// Drop and re-create table
 	refresh_db_table()
 
 	// Ingest records to DB
-	load_to_db(LessPermits)
+	load_to_db(Permits)
 
 	// Query DB to confirm
 	test_successful_insert()
