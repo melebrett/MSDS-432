@@ -18,7 +18,7 @@ import (
 )
 
 // API endpoint URL
-const url = "https://data.cityofchicago.org/resource/yhhz-zm2v.json"
+const url = "https://data.cityofchicago.org/resource/yhhz-zm2v.json?$limit=50000"
 
 // Define struct for individual records
 type ZipInfo struct {
@@ -251,9 +251,6 @@ func main() {
 
 	// Loading from json file to avoid unnecessary API calls
 	// LoadTripsJSON("reports.json")
-
-	// reducing file size to manage Google Cloud credit consumption
-	// LessReports := Reports[0:1000]
 
 	// Drop and re-create table
 	refresh_db_table()

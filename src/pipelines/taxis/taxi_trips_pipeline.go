@@ -18,7 +18,7 @@ import (
 )
 
 // API endpoint URL
-const url = "https://data.cityofchicago.org/resource/wrvz-psew.json"
+const url = "https://data.cityofchicago.org/resource/wrvz-psew.json?$limit=50000"
 
 // Define struct for individual records
 type TaxiTrip struct {
