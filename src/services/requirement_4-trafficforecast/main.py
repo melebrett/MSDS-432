@@ -19,8 +19,9 @@ def main():
     PORT = os.getenv('DBPORT')
     DB = os.getenv('DBNAME')
 
-    connection_string = f"postgresql+psycopg2://{USER}:%s@{LAKE}:{PORT}/{DB}"
-    pglake = create_engine(connection_string % quote(PWD))
+    connection_string = f"postgresql+psycopg2://{USER}:{PWD}@/{DB}?host=/cloudsql/{LAKE}"
+    # connection_string = f"postgresql+psycopg2://{USER}:%s@{LAKE}/{DB}"
+    pglake = create_engine(connection_string)
 
     df_raw = pd.read_sql("select * from taxi_trips", pglake)
     # pglake.close()
@@ -100,8 +101,10 @@ def main():
 
     # write to mart
     try:
-        connection_string = f"postgresql+psycopg2://{USER}:%s@{MART}:{PORT}/{DB}"
-        pgmart = create_engine(connection_string % quote(PWD))
+
+        connection_string = f"postgresql+psycopg2://{USER}:{PWD}@/{DB}?host=/cloudsql/{MART}"
+        # connection_string = f"postgresql+psycopg2://{USER}:%s@{MART}:{PORT}/{DB}"
+        pgmart = create_engine(connection_string)
         conn = pgmart.connect()
 
         df.to_sql("requirement_4_taxi_trips",schema="public", con = conn, if_exists="replace")
