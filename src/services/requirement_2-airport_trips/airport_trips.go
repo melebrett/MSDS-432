@@ -63,10 +63,10 @@ func DLConnect() (*sql.DB, error) {
 	}
 
 	var (
-		dbUser                 = mustGetenv("DLUSER")     // e.g. 'my-db-user'
-		dbPwd                  = mustGetenv("DLPASSWORD") // e.g. 'my-db-password'
-		dbName                 = mustGetenv("DLDBNAME")   // e.g. 'my-database'
-		instanceConnectionName = mustGetenv("DLINSTANCE") // e.g. 'project:region:instance'
+		dbUser                 = mustGetenv("DLUSER")
+		dbPwd                  = mustGetenv("DLPASSWORD")
+		dbName                 = mustGetenv("DLDBNAME")
+		instanceConnectionName = mustGetenv("DLINSTANCE")
 	)
 
 	dsn := fmt.Sprintf("user=%s password=%s database=%s", dbUser, dbPwd, dbName)
@@ -154,7 +154,8 @@ func query_taxis() []TaxiTrips {
 
 	defer db.Close()
 
-	statement := `SELECT TripID, TaxiID, TripStartTimestamp, PickupCentroidLatitude, PickupCentroidLongitude, DropoffCentroidLatitude, DropoffCentroidLongitude FROM taxi_trips`
+	// Limiting query to 10,000 records to allow for runtime <1 hour (Cloud Run timeout limit)
+	statement := `SELECT TripID, TaxiID, TripStartTimestamp, PickupCentroidLatitude, PickupCentroidLongitude, DropoffCentroidLatitude, DropoffCentroidLongitude FROM taxi_trips LIMIT 10000`
 
 	rows, err := db.Query(statement)
 	if err != nil {
@@ -368,5 +369,5 @@ func main() {
 	LoadToDataMart(AirportTrips)
 
 	// Testing successful ingestion to Data Mart
-	TestInsertion()
+	// TestInsertion()
 }

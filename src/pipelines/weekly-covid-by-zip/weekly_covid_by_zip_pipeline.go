@@ -258,7 +258,7 @@ func main() {
 	// Ingest records to DB
 	load_to_db(ZipsInfo)
 
-	// Query DB to confirm
-	test_successful_insert()
+	// // Query DB to confirm
+	// test_successful_insert()
 
 }

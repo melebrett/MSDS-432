@@ -171,7 +171,7 @@ func query_taxis() []TaxiTrips {
 
 	defer db.Close()
 
-	statement := `SELECT TripID, TaxiID, TripStartTimestamp, PickupCentroidLatitude, PickupCentroidLongitude, DropoffCentroidLatitude, DropoffCentroidLongitude FROM taxi_trips`
+	statement := `SELECT TripID, TaxiID, TripStartTimestamp, PickupCentroidLatitude, PickupCentroidLongitude, DropoffCentroidLatitude, DropoffCentroidLongitude FROM taxi_trips LIMIT 10000`
 
 	rows, err := db.Query(statement)
 	if err != nil {
