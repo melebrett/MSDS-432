@@ -138,8 +138,8 @@ func refresh_db_table() {
 
 	createTableStatement := `CREATE TABLE neighborhoods (
 								GeoType                 TEXT,
-								Latitude				TEXT,
-								Longitude				TEXT,
+								Latitude				FLOAT,
+								Longitude				FLOAT,
 								PRI_NEIGH               TEXT,
 								SEC_NEIGH			    TEXT,
 								SHAPE_AREA        		TEXT,
@@ -208,10 +208,6 @@ func main() {
 
 	// // Loading from json file to avoid unnecessary API calls
 	// LoadNeighsJSON("neighborhoods.json")
-
-	// reducing file size to manage Google Cloud credit consumption
-	//LessNeighs := Neighs[0:1000]
-	//fmt.Println(LessNeighs)
 
 	// Drop and re-create table
 	refresh_db_table()
