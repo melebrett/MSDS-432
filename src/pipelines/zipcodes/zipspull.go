@@ -139,8 +139,8 @@ func refresh_db_table() {
 
 	createTableStatement := `CREATE TABLE Zipcodes (
 								GeoType                 TEXT,
-								Latitude				TEXT,
-								LONGITUDE				TEXT,
+								Latitude				FLOAT,
+								LONGITUDE				FLOAT,
 								OBJECTID                TEXT,
 								ZIP 				    TEXT,
 								SHAPE_AREA        		TEXT,
