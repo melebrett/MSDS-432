@@ -22,7 +22,10 @@ const url = "https://data.cityofchicago.org/resource/igwz-8jzy.json"
 
 // Define struct for individual records
 type CommunityBoundary struct {
-	Geom      string `json:"the_geom"`
+	TheGeom struct {
+		GeoType     string          `json:"type"`
+		Coordinates [][][][]float64 `json:"coordinates"`
+	} `json:"the_geom"`
 	AreaNum   string `json:"area_numbe"`
 	Community string `json:"community"`
 	ShapeArea string `json:"shape_area"`
@@ -137,7 +140,8 @@ func refresh_db_table() {
 	createTableStatement := `CREATE TABLE community_boundaries (
 		AreaNum		TEXT PRIMARY KEY,
 		Community   TEXT,
-		Geom        TEXT,
+		Latitude    FLOAT,
+		Longitude	FLOAT,
 		ShapeArea	TEXT,
 		ShapeLen	TEXT
 		);`
@@ -156,21 +160,17 @@ func load_to_db(Boundaries []CommunityBoundary) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO community_boundaries (AreaNum, Community, Geom, ShapeArea, ShapeLen) 
-							values ($1, $2, $3, $4, $5)
+	insertStatement := `INSERT INTO community_boundaries (AreaNum, Community, Latitude, Longitude, ShapeArea, ShapeLen) 
+							values ($1, $2, $3, $4, $5, $6)
 							ON CONFLICT (AreaNum) 
 							DO NOTHING;`
 
 	for _, v := range Boundaries {
-		_, err = db.Exec(insertStatement,
-			v.AreaNum,
-			v.Community,
-			v.Geom,
-			v.ShapeArea,
-			v.ShapeLen,
-		)
-		if err != nil {
-			fmt.Printf("Error inserting record, Community = %v", v.Community)
+		for _, val := range v.TheGeom.Coordinates[0][0] {
+			_, err = db.Exec(insertStatement, v.AreaNum, v.Community, val[0], val[1], v.ShapeArea, v.ShapeLen)
+			if err != nil {
+				fmt.Printf("Error inserting record, Community = %v", v.Community)
+			}
 		}
 	}
 }
@@ -183,7 +183,7 @@ func test_successful_insert() {
 
 	defer db.Close()
 
-	testStatement1 := "SELECT Community FROM community_boundaries LIMIT 10"
+	testStatement1 := "SELECT Latitude FROM community_boundaries LIMIT 10"
 	rows, err := db.Query(testStatement1)
 	if err != nil {
 		panic(err)
@@ -204,7 +204,6 @@ func test_successful_insert() {
 func main() {
 
 	GetAPIrequest(url)
-	// fmt.Printf("%v", Boundaries)
 
 	// Drop and re-create table
 	refresh_db_table()
