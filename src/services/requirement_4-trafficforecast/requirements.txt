@@ -1,5 +1,8 @@
 geopandas==0.12.2
 geopy==2.3.0
+psycopg2-binary==2.9.5
+SQLAlchemy==1.4.39
 pandas==1.4.4
 python-dotenv==1.0.0
-SQLAlchemy==1.4.39
+
+
