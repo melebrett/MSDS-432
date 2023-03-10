@@ -154,6 +154,8 @@ func GetZipCode(userAgent string, lat, lon float64) string {
 
 	json.Unmarshal(resBody, &myresults)
 
+	fmt.Println(myresults)
+
 	return myresults.Address.Postcode
 }
 
@@ -316,18 +318,16 @@ func LoadToDataLake(neighborhoodList []Neighborhoods) {
 
 func main() {
 	Hoods = query_neighs()
-	fmt.Println(Hoods)
+	//fmt.Println(Hoods)
 
-	//HoodZips = append(HoodZips, Hoods...)
+	for i := 0; i < len(Hoods); i++ {
+		record := &Hoods[i]
 
-	for i := 0; i < len(HoodZips); i++ {
-		record := &HoodZips[i]
 		zip := GetZipCode("msds432-final-group-4", record.LATITUDE, record.LONGITUDE)
-
 		record.ASSIGNED_ZIP = zip
-		fmt.Println(zip)
+
 	}
-	fmt.Println(HoodZips)
+	//fmt.Println(HoodZips)
 	//CreateDataLakeTable()
 	//LoadToDataLake(Hoods)
 	//CreateDataMartTable()
