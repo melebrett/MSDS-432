@@ -13,20 +13,20 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type Neighborhoods struct {
+type Communities struct {
+	AREANUM      int     `json:"areanum"`
+	COMMUNITY    string  `json:"community"`
 	LATITUDE     float64 `json:"latitude"`
 	LONGITUDE    float64 `json:"longitude"`
-	PRI_NEIGH    string  `json:"pri_neigh"`
-	SEC_NEIGH    string  `json:"sec_neigh"`
-	SHAPE_AREA   string  `json:"shape_area"`
-	SHAPE_LEN    string  `json:"shape_len"`
+	SHAPEAREA    string  `json:"shapearea"`
+	SHAPELEN     string  `json:"shapelen"`
 	ASSIGNED_ZIP string  `json:"assigned_zip"`
 }
 
-type AggNeighborhoods struct {
-	ZIPCODE   string `json:"zipcode"`
-	PRI_NEIGH string `json:"pri_neigh"`
-	SEC_NEIGH string `json:"sec_neigh"`
+type AggCommunities struct {
+	AREANUM   int    `json:"areanum"`
+	COMMUNITY string `json:"community"`
+	ZIPCODE   string `json:"assigned_zip"`
 }
 
 type Nominatim struct {
@@ -48,11 +48,11 @@ type NominatimAddress struct {
 	Postcode      string `json:"postcode"`
 }
 
-var Hoods []Neighborhoods
-var HoodZips []Neighborhoods
-var AggHoodZips []AggNeighborhoods
+var Comms []Communities
+var CommZips []Communities
+var AggCommZips []AggCommunities
 
-func query_neighs() []Neighborhoods {
+func query_comms() []Communities {
 	db, err := DLConnect()
 	if err != nil {
 		log.Fatal(err)
@@ -60,9 +60,9 @@ func query_neighs() []Neighborhoods {
 
 	defer db.Close()
 
-	statement := `select longitude, latitude, pri_neigh, sec_neigh, shape_area, shape_len from(
-					SELECT LATITUDE as LONGITUDE, LONGITUDE as LATITUDE, PRI_NEIGH, SEC_NEIGH, SHAPE_AREA, SHAPE_LEN, row_number() over (partition by sec_neigh order by random()) id 
-					FROM neighborhoods n)x
+	statement := `select areanum, community, longitude, latitude, shapearea, shapelen from(
+					SELECT areanum, community, LATITUDE as LONGITUDE, LONGITUDE as LATITUDE, SHAPELEN, SHAPEAREA, row_number() over (partition by community order by random()) id 
+					FROM community_boundaries n)x
 					where id <= 20`
 
 	rows, err := db.Query(statement)
@@ -70,20 +70,20 @@ func query_neighs() []Neighborhoods {
 		log.Fatal("Error querying database: ", err)
 	}
 
-	Data := []Neighborhoods{}
+	Data := []Communities{}
 
 	for rows.Next() {
+		var areanum int
+		var community string
 		var latitude float64
 		var longitude float64
-		var pri_neigh string
-		var sec_neigh string
-		var shape_area string
-		var shape_len string
-		err = rows.Scan(&latitude, &longitude, &pri_neigh, &sec_neigh, &shape_area, &shape_len)
+		var shapearea string
+		var shapelen string
+		err = rows.Scan(&areanum, &community, &latitude, &longitude, &shapearea, &shapelen)
 		if err != nil {
 			log.Fatal("Scan error", err)
 		}
-		temp := Neighborhoods{LATITUDE: latitude, LONGITUDE: longitude, PRI_NEIGH: pri_neigh, SEC_NEIGH: sec_neigh, SHAPE_AREA: shape_area, SHAPE_LEN: shape_len}
+		temp := Communities{AREANUM: areanum, COMMUNITY: community, LATITUDE: latitude, LONGITUDE: longitude, SHAPEAREA: shapearea, SHAPELEN: shapelen}
 
 		Data = append(Data, temp)
 	}
@@ -93,7 +93,7 @@ func query_neighs() []Neighborhoods {
 	return Data
 }
 
-func query_aggneighs() []AggNeighborhoods {
+func query_aggneighs() []AggCommunities {
 	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
@@ -101,33 +101,32 @@ func query_aggneighs() []AggNeighborhoods {
 
 	defer db.Close()
 
-	statement := `select zipcode, pri_neigh, sec_neigh from (
-					select zipcode, pri_neigh, sec_neigh
-					from (select zipcode, pri_neigh, sec_neigh,
-							rank() over (partition by pri_neigh, sec_neigh order by numzips desc) rankno
+	statement := `select zipcode, areanum, community from (
+					select zipcode, areanum, community
+					from (select zipcode, areanum, community,
+							row_number() over (partition by areanum, community order by numzips desc) rankno
 					from (
-						select zipcode, pri_neigh, sec_neigh, count(*)numzips
-						from neighborhood_zips_temp
-						group by zipcode, pri_neigh, sec_neigh)z)y
-					where rankno = 1)x
-					fetch first row only;`
+						select zipcode, areanum, community, count(*)numzips
+						from comm_zips_temp
+						group by zipcode, areanum, community)z)y
+					where rankno = 1)x;`
 
 	rows, err := db.Query(statement)
 	if err != nil {
 		log.Fatal("Error querying database: ", err)
 	}
 
-	Data := []AggNeighborhoods{}
+	Data := []AggCommunities{}
 
 	for rows.Next() {
+		var areanum int
+		var community string
 		var zipcode string
-		var pri_neigh string
-		var sec_neigh string
-		err = rows.Scan(&zipcode, &pri_neigh, &sec_neigh)
+		err = rows.Scan(&areanum, &community, &zipcode)
 		if err != nil {
 			log.Fatal("Scan error", err)
 		}
-		temp := AggNeighborhoods{ZIPCODE: zipcode, PRI_NEIGH: pri_neigh, SEC_NEIGH: sec_neigh}
+		temp := AggCommunities{AREANUM: areanum, COMMUNITY: community, ZIPCODE: zipcode}
 
 		Data = append(Data, temp)
 	}
@@ -173,19 +172,19 @@ func GetZipCode(userAgent string, lat, lon float64) string {
 }
 
 func main() {
-	Hoods = query_neighs()
-	HoodZips = append(HoodZips, Hoods...)
+	Comms = query_comms()
+	CommZips = append(CommZips, Comms...)
 
-	for i := 0; i < len(HoodZips); i++ {
-		record := &HoodZips[i]
+	for i := 0; i < len(CommZips); i++ {
+		record := &CommZips[i]
 		zip := GetZipCode("msds432-final-group-4", record.LATITUDE, record.LONGITUDE)
 
 		record.ASSIGNED_ZIP = zip
 	}
 
-	DMTempTable(HoodZips)
+	DMTempTable(CommZips)
 
-	AggHoodZips = query_aggneighs()
-	DMProdTable(AggHoodZips)
+	AggCommZips = query_aggneighs()
+	DMProdTable(AggCommZips)
 
 }
