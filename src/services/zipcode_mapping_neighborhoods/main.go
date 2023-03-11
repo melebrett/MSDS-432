@@ -104,13 +104,12 @@ func query_aggneighs() []AggNeighborhoods {
 	statement := `select zipcode, pri_neigh, sec_neigh from (
 					select zipcode, pri_neigh, sec_neigh
 					from (select zipcode, pri_neigh, sec_neigh,
-							rank() over (partition by pri_neigh, sec_neigh order by numzips desc) rankno
+							row_number() over (partition by pri_neigh, sec_neigh order by numzips desc) rankno
 					from (
 						select zipcode, pri_neigh, sec_neigh, count(*)numzips
 						from neighborhood_zips_temp
 						group by zipcode, pri_neigh, sec_neigh)z)y
-					where rankno = 1)x
-					fetch first row only;`
+					where rankno = 1)x;`
 
 	rows, err := db.Query(statement)
 	if err != nil {
