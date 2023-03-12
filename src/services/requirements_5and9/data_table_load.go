@@ -96,8 +96,8 @@ func query_req5() []Req5 {
 
 	defer db.Close()
 
-	statement := `select id, permit_type, review_type, processing_time, work_description, total_fee, reported_cost, community_area, contact_zip 
-					from building_permits where coalesce(contact_zip,'0') != '0' or community_area is not null limit 5000;`
+	statement := `select id, permit_type, review_type, processing_time, work_description, total_fee, reported_cost, community_area, replace(contact_zip,'-','')
+					from building_permits where coalesce(contact_zip,'0') != '0' or community_area is not null limit 3000;`
 
 	rows, err := db.Query(statement)
 	if err != nil {
@@ -195,7 +195,7 @@ func query_req9() []Req9 {
 	defer db.Close()
 
 	statement := `select tripid, tripmiles, triptotal, pickupcommunityarea, dropoffcommunityarea, tripstarttimestamp
-					from taxi_trips where pickupcommunityarea is not null or dropoffcommunityarea is not null limit 5000;`
+					from taxi_trips where pickupcommunityarea is not null or dropoffcommunityarea is not null limit 3000;`
 
 	rows, err := db.Query(statement)
 	if err != nil {
@@ -250,7 +250,7 @@ func DMProdTable9(rq9fromquery []Req9) {
 														TRIPTOTAL TEXT,
 														PICKUPCOMMUNITYAREA TEXT,
 														DROPOFFCOMMUNITYAREA TEXT,
-														TRIPSTARTTIMESTAMP TIMESTAMPZ);`
+														TRIPSTARTTIMESTAMP TIMESTAMPTZ);`
 
 	_, err = db.Exec(createProdTable)
 	if err != nil {
