@@ -134,7 +134,7 @@ func DMProdTable(aggCommList []AggCommunities) {
 	}
 
 	insertProdTable := `insert into comm_zips (zipcode, areanum, community)
-								values ($1, $2, $3);`
+								values ($2, $3, $1);`
 
 	for _, v := range aggCommList {
 		_, err = db.Exec(insertProdTable, v.ZIPCODE, v.AREANUM, v.COMMUNITY)
