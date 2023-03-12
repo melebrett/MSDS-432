@@ -2,8 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 
@@ -12,11 +15,12 @@ import (
 )
 
 type BuildingPermit struct {
-	ID         string
-	PermitNum  int
-	PermitType string
-	Latitude   float64
-	Longitude  float64
+	ID            string
+	PermitNum     int
+	PermitType    string
+	Latitude      float64
+	Longitude     float64
+	PermitZipCode int
 }
 
 type Community struct {
@@ -25,6 +29,7 @@ type Community struct {
 	BelowPoverty      float64
 	PerCapitaIncome   int
 	Unemployment      float64
+	CommunityZipCode  int
 }
 
 type Nominatim struct {
@@ -46,8 +51,14 @@ type NominatimAddress struct {
 	Postcode      int    `json:"postcode,string"`
 }
 
+type CommZip struct {
+	ZipCode      int
+	CommunityNum int
+}
+
 var Permits []BuildingPermit
 var CommunityData []Community
+var CommunityMapping []CommZip
 
 func DLConnect() (*sql.DB, error) {
 	mustGetenv := func(k string) string {
@@ -145,7 +156,7 @@ func queryBuildingPermits() []BuildingPermit {
 
 	defer db.Close()
 
-	statement := `SELECT id, permit_num, permit_type, latitude, longitude FROM building_permits`
+	statement := `SELECT id, permit_num, permit_type, latitude, longitude FROM building_permits LIMIT 10000`
 
 	rows, err := db.Query(statement)
 	if err != nil {
@@ -174,7 +185,7 @@ func queryBuildingPermits() []BuildingPermit {
 	return Data
 }
 
-func queryCommunityHealth() []Community {
+func queryCommunityHealthUnder30kPCI() []Community {
 	db, err := DLConnect()
 	if err != nil {
 		log.Fatal(err)
@@ -182,7 +193,7 @@ func queryCommunityHealth() []Community {
 
 	defer db.Close()
 
-	statement := `SELECT communityarea, communityareaname, belowpoverty, percapitaincome, unemployment FROM community_health`
+	statement := `SELECT communityarea, communityareaname, belowpoverty, percapitaincome, unemployment FROM community_health WHERE percapitaincome::INT < 30000`
 
 	rows, err := db.Query(statement)
 	if err != nil {
@@ -211,6 +222,40 @@ func queryCommunityHealth() []Community {
 	return Data
 }
 
+func queryCommunityMapping() []CommZip {
+	db, err := DMConnect()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	statement := `SELECT areanum AS zipcode, community AS community_num FROM comm_zips`
+
+	rows, err := db.Query(statement)
+	if err != nil {
+		log.Fatal("Error querying database for community-zip code mapping: ", err)
+	}
+
+	Data := []CommZip{}
+
+	for rows.Next() {
+		var zipcode int
+		var communitynum string
+		err = rows.Scan(&zipcode, &communitynum)
+		if err != nil {
+			log.Fatal("Scan error", err)
+		}
+		temp := CommZip{ZipCode: zipcode, CommunityNum: String2Int(communitynum)}
+
+		Data = append(Data, temp)
+	}
+
+	defer rows.Close()
+
+	return Data
+}
+
 func NewBuildPermits(AllPermits []BuildingPermit) []BuildingPermit {
 	var NewBuilds []BuildingPermit
 	for _, v := range AllPermits {
@@ -221,13 +266,161 @@ func NewBuildPermits(AllPermits []BuildingPermit) []BuildingPermit {
 	return NewBuilds
 }
 
+func GetZipCode(userAgent string, lat, lon float64) int {
+	var myresults Nominatim
+	url := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%f&lon=%f", lat, lon)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	req.Header.Set("User-Agent", userAgent)
+
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		fmt.Println(resp.StatusCode)
+	}
+
+	resBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	json.Unmarshal(resBody, &myresults)
+
+	return myresults.Address.Postcode
+}
+
+func CreateDataMartTable() {
+	db, err := DMConnect()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	dropTableStatement := "DROP TABLE IF EXISTS requirement_6_new_construction;"
+
+	_, err = db.Exec(dropTableStatement)
+	if err != nil {
+		panic(err)
+	}
+
+	createTableStatement := `CREATE TABLE requirement_6_new_construction (
+								ID            TEXT PRIMARY KEY,
+								PermitNum     INT,
+								PermitType    TEXT,
+								Latitude      FLOAT,
+								Longitude     FLOAT,
+								PermitZipCode INT
+							);`
+
+	_, err = db.Exec(createTableStatement)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func LoadToDataMart(Permits []BuildingPermit) {
+	db, err := DMConnect()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	insertStatement := `INSERT INTO requirement_6_new_construction (ID, PermitNum, PermitType, Latitude, Longitude, PermitZipCode) 
+							values ($1, $2, $3, $4, $5, $6)
+							ON CONFLICT (ID) 
+							DO NOTHING;`
+
+	for _, v := range Permits {
+		_, err = db.Exec(insertStatement, v.ID, v.PermitNum, v.PermitType, v.Latitude, v.Longitude, v.PermitZipCode)
+		if err != nil {
+			log.Println("Error inserting record, ID = ", v.ID, err)
+		}
+	}
+}
+
+func TestInsertion() {
+	db, err := DMConnect()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	testStatement1 := "SELECT ID FROM requirement_6_new_construction LIMIT 10"
+	rows, err := db.Query(testStatement1)
+	if err != nil {
+		panic(err)
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		var testpermit string
+		err = rows.Scan(&testpermit)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(testpermit)
+	}
+}
+
 func main() {
 	Permits := queryBuildingPermits()
 
 	NewBuildPermits := NewBuildPermits(Permits)
 
-	CommunityHealth := queryCommunityHealth()
+	CommunitiesLessThan30kPCI := queryCommunityHealthUnder30kPCI()
 
-	// Need to map communities to zipcodes and join with building permits. Then filter for lowest new build permits and and per capita income <$30,000
+	CommunityZipCodes := queryCommunityMapping()
 
+	// Get zip codes for new construction building permits
+	for i := 0; i < len(NewBuildPermits); i++ {
+		record := &NewBuildPermits[i]
+
+		record.PermitZipCode = GetZipCode("msds432-final-group-4", record.Latitude, record.Longitude)
+	}
+
+	// Map Communities to ZipCodes for community health / unemployment data
+	for i := 0; i < len(CommunitiesLessThan30kPCI); i++ {
+		record := &CommunitiesLessThan30kPCI[i]
+
+		for _, v := range CommunityZipCodes {
+			if v.CommunityNum == record.CommunityArea {
+				record.CommunityZipCode = v.ZipCode
+			}
+		}
+	}
+
+	// Filter for lowest new build permits among qualified zip codes
+	var QualifiedBuildingPermits []BuildingPermit
+
+	for _, v := range NewBuildPermits {
+		for _, val := range CommunitiesLessThan30kPCI {
+			if v.PermitZipCode == val.CommunityZipCode {
+				QualifiedBuildingPermits = append(QualifiedBuildingPermits, v)
+			}
+		}
+	}
+
+	// Create table in DataMart
+	CreateDataMartTable()
+
+	// Ingest processed records to Data Mart
+	LoadToDataMart(QualifiedBuildingPermits)
+
+	// // Test successful ingestion
+	// TestInsertion()
 }
