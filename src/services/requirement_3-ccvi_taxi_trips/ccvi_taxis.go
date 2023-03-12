@@ -16,7 +16,6 @@ import (
 	"cloud.google.com/go/cloudsqlconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -173,7 +172,7 @@ func String2Timestamp(s string) time.Time {
 }
 
 func query_taxis() []TaxiTrips {
-	db, err := DLConnectLocal()
+	db, err := DLConnect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -212,7 +211,7 @@ func query_taxis() []TaxiTrips {
 }
 
 func query_ccvi() []CCVI {
-	db, err := DLConnectLocal()
+	db, err := DLConnect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -249,7 +248,7 @@ func query_ccvi() []CCVI {
 }
 
 func query_neighborhoods() []Neighborhood {
-	db, err := DMConnectLocal()
+	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -318,7 +317,7 @@ func GetZipCode(userAgent string, lat, lon float64) int {
 }
 
 func CreateDataMartTable() {
-	db, err := DMConnectLocal()
+	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -357,7 +356,7 @@ func CreateDataMartTable() {
 }
 
 func LoadToDataMart(TaxisCCVI []TaxiTrips) {
-	db, err := DMConnectLocal()
+	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -378,7 +377,7 @@ func LoadToDataMart(TaxisCCVI []TaxiTrips) {
 }
 
 func TestInsertion() {
-	db, err := DMConnectLocal()
+	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -401,68 +400,6 @@ func TestInsertion() {
 		}
 		fmt.Println(testccvi)
 	}
-}
-
-func DLConnectLocal() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	if err != nil {
-		fmt.Println("Could not load .env file")
-	}
-
-	HOST := os.Getenv("DLHOST")
-	PORT := os.Getenv("DLPORT")
-	USER := os.Getenv("DLUSER")
-	PASSWORD := os.Getenv("DLPASSWORD")
-	DBNAME := os.Getenv("DLDBNAME")
-
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
-
-	db, err := sql.Open("postgres", DB_DSN)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// err = db.Ping()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	fmt.Println("Successfully connected to DB")
-
-	return db, nil
-}
-
-func DMConnectLocal() (*sql.DB, error) {
-	//Retreiving DB connection credential environment variables
-	err := godotenv.Load(".env")
-	if err != nil {
-		fmt.Println("Could not load .env file")
-	}
-
-	HOST := os.Getenv("DMHOST")
-	PORT := os.Getenv("DMPORT")
-	USER := os.Getenv("DMUSER")
-	PASSWORD := os.Getenv("DMPASSWORD")
-	DBNAME := os.Getenv("DMDBNAME")
-
-	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
-
-	db, err := sql.Open("postgres", DB_DSN)
-
-	if err != nil {
-		return nil, err
-	}
-
-	// err = db.Ping()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	fmt.Println("Successfully connected to DB")
-
-	return db, nil
 }
 
 func main() {
