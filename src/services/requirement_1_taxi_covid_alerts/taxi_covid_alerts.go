@@ -1,23 +1,27 @@
 package main
 
 import (
-	"context"
+	// "context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
-	"cloud.google.com/go/cloudsqlconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
+	"github.com/joho/godotenv"
+	_ "github.com/joho/godotenv/autoload"
 	_ "github.com/lib/pq"
 )
+
+type Coords struct {
+	Latitude  float64
+	Longitude float64
+}
 
 type TaxiTrips struct {
 	TripID             string
@@ -28,7 +32,18 @@ type TaxiTrips struct {
 	DropoffLatitude    float64
 	DropoffLongitude   float64
 	PickupLocationName string
-	DropoffZipCode     int
+	PickupZipCode      string
+	DropoffZipCode     string
+}
+
+type CovidReport struct {
+	Zipcode     string
+	WeekStart   time.Time
+	WeekEnd     time.Time
+	TestsWeekly int
+	PctPos      float64
+	population  int
+	cases       int
 }
 
 type Nominatim struct {
@@ -51,88 +66,68 @@ type NominatimAddress struct {
 }
 
 var Trips []TaxiTrips
-var AirportTrips []TaxiTrips
+var CovidReports []CovidReport
 
+// data lake connection
 func DLConnect() (*sql.DB, error) {
-	mustGetenv := func(k string) string {
-		v := os.Getenv(k)
-		if v == "" {
-			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
-		}
-		return v
+	//Retreiving DB connection credential environment variables
+	err := godotenv.Load(".env")
+	var DLHOST = os.Getenv("DLHOST")
+	var DLPORT = os.Getenv("DLPORT")
+	var DLUSER = os.Getenv("DLUSER")
+	var DLPASSWORD = os.Getenv("DLPASSWORD")
+	var DLDBNAME = os.Getenv("DLDBNAME")
+	if err != nil {
+		log.Println("Could not load .env file", err)
 	}
 
-	var (
-		dbUser                 = mustGetenv("DLUSER")
-		dbPwd                  = mustGetenv("DLPASSWORD")
-		dbName                 = mustGetenv("DLDBNAME")
-		instanceConnectionName = mustGetenv("DLINSTANCE")
-	)
+	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DLHOST, DLPORT, DLUSER, DLPASSWORD, DLDBNAME)
 
-	dsn := fmt.Sprintf("user=%s password=%s database=%s", dbUser, dbPwd, dbName)
-	config, err := pgx.ParseConfig(dsn)
+	db, err := sql.Open("postgres", DB_DSN)
+
 	if err != nil {
 		return nil, err
 	}
-	var opts []cloudsqlconn.Option
-	d, err := cloudsqlconn.NewDialer(context.Background(), opts...)
-	if err != nil {
-		return nil, err
-	}
-	// Use the Cloud SQL connector to handle connecting to the instance.
-	// This approach does *NOT* require the Cloud SQL proxy.
-	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
-		return d.Dial(ctx, instanceConnectionName)
-	}
-	dbURI := stdlib.RegisterConnConfig(config)
-	dbPool, err := sql.Open("pgx", dbURI)
-	if err != nil {
-		return nil, fmt.Errorf("sql.Open: %v", err)
-	}
-	return dbPool, nil
+
+	log.Println("Successfully connected to Data Lake")
+
+	return db, nil
 }
 
+// data mart connection
 func DMConnect() (*sql.DB, error) {
-	mustGetenv := func(k string) string {
-		v := os.Getenv(k)
-		if v == "" {
-			log.Fatalf("Fatal Error in connect_connector.go: %s environment variable not set.\n", k)
-		}
-		return v
+	//Retreiving DB connection credential environment variables
+	fmt.Println("connecting to db")
+	err := godotenv.Load(".env")
+	var DMHOST = os.Getenv("DMHOST")
+	var DMPORT = os.Getenv("DMPORT")
+	var DMUSER = os.Getenv("DMUSER")
+	var DMPASSWORD = os.Getenv("DMPASSWORD")
+	var DMDBNAME = os.Getenv("DMDBNAME")
+	if err != nil {
+		log.Println("Could not load .env file")
 	}
 
-	var (
-		dbUser                 = mustGetenv("DMUSER")     // e.g. 'my-db-user'
-		dbPwd                  = mustGetenv("DMPASSWORD") // e.g. 'my-db-password'
-		dbName                 = mustGetenv("DMDBNAME")   // e.g. 'my-database'
-		instanceConnectionName = mustGetenv("DMINSTANCE") // e.g. 'project:region:instance'
-	)
+	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", DMHOST, DMPORT, DMUSER, DMPASSWORD, DMDBNAME)
 
-	dsn := fmt.Sprintf("user=%s password=%s database=%s", dbUser, dbPwd, dbName)
-	config, err := pgx.ParseConfig(dsn)
+	db, err := sql.Open("postgres", DB_DSN)
+
 	if err != nil {
 		return nil, err
 	}
-	var opts []cloudsqlconn.Option
-	d, err := cloudsqlconn.NewDialer(context.Background(), opts...)
-	if err != nil {
-		return nil, err
-	}
-	// Use the Cloud SQL connector to handle connecting to the instance.
-	// This approach does *NOT* require the Cloud SQL proxy.
-	config.DialFunc = func(ctx context.Context, network, instance string) (net.Conn, error) {
-		return d.Dial(ctx, instanceConnectionName)
-	}
-	dbURI := stdlib.RegisterConnConfig(config)
-	dbPool, err := sql.Open("pgx", dbURI)
-	if err != nil {
-		return nil, fmt.Errorf("sql.Open: %v", err)
-	}
-	return dbPool, nil
+
+	log.Println("Successfully connected to Data Mart")
+
+	return db, nil
 }
 
 func String2Float(s string) float64 {
 	value, _ := strconv.ParseFloat(s, 64)
+	return value
+}
+
+func String2Int(s string) int {
+	value, _ := strconv.Atoi(s)
 	return value
 }
 
@@ -186,36 +181,43 @@ func query_taxis() []TaxiTrips {
 	return Data
 }
 
-func GetLocationName(userAgent string, lat, lon float64) string {
-	var myresults Nominatim
-	url := fmt.Sprintf("https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=%f&lon=%f", lat, lon)
-	req, err := http.NewRequest("GET", url, nil)
+func query_covid() []CovidReport {
+	db, err := DLConnect()
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
 
-	req.Header.Set("User-Agent", userAgent)
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	defer db.Close()
 
+	// Limiting query to 10,000 records to allow for runtime <1 hour (Cloud Run timeout limit)
+	statement := `SELECT zipcode, weekstart, weekend, testsweekly, pctpositiveweekly, population FROM weekly_covid_by_zip LIMIT 10000`
+
+	rows, err := db.Query(statement)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal("Error querying database: ", err)
 	}
 
-	defer resp.Body.Close()
+	Data := []CovidReport{}
 
-	if resp.StatusCode != 200 {
-		fmt.Println(resp.StatusCode)
+	for rows.Next() {
+		var zipcode string
+		var weekstart string
+		var weekend string
+		var testsweekly string
+		var pctpositiveweekly string
+		var population string
+		err = rows.Scan(&zipcode, &weekstart, &weekend, &testsweekly, &pctpositiveweekly, &population)
+		if err != nil {
+			log.Fatal("Scan error", err)
+		}
+		temp := CovidReport{Zipcode: zipcode, WeekStart: String2Timestamp(weekstart), WeekEnd: String2Timestamp(weekend), TestsWeekly: String2Int(testsweekly), PctPos: String2Float(pctpositiveweekly), population: String2Int(population)}
+
+		Data = append(Data, temp)
 	}
 
-	resBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		fmt.Println(err)
-	}
+	defer rows.Close()
 
-	json.Unmarshal(resBody, &myresults)
-
-	return myresults.DisplayName
+	return Data
 }
 
 func GetZipCode(userAgent string, lat, lon float64) string {
@@ -257,7 +259,8 @@ func GetZipCode(userAgent string, lat, lon float64) string {
 	return myresults.Address.Postcode
 }
 
-func CreateDataMartTable() {
+func CreateDataMartTables() {
+	fmt.Println("\ncreating data mart tables")
 	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
@@ -265,33 +268,56 @@ func CreateDataMartTable() {
 
 	defer db.Close()
 
-	dropTableStatement := "DROP TABLE IF EXISTS requirement_2_airport_trips;"
+	dropTableStatementTrips := "DROP TABLE IF EXISTS requirement_1_taxi_trips;"
 
-	_, err = db.Exec(dropTableStatement)
+	_, err = db.Exec(dropTableStatementTrips)
 	if err != nil {
 		panic(err)
 	}
 
-	createTableStatement := `CREATE TABLE requirement_2_airport_trips (
+	createTableStatementTrips := `CREATE TABLE requirement_1_taxi_trips (
 								TripID               TEXT PRIMARY KEY,
 								TaxiID               TEXT,
 								TripStartTimestamp   TIMESTAMPTZ,
 								PickupLatitude       FLOAT,
 								PickupLongitude      FLOAT,
-								PickupLocationName	 TEXT,
 								DropoffLatitude      FLOAT,
 								DropoffLongitude     FLOAT,
-								DropoffZipCode       INTEGER,
-								DropoffNeighborhood	 TEXT
+								PickupZipCode       VARCHAR(6),
+								DropoffZipCode       VARCHAR(6)
 							);`
 
-	_, err = db.Exec(createTableStatement)
+	_, err = db.Exec(createTableStatementTrips)
 	if err != nil {
 		panic(err)
 	}
+
+	dropTableStatementCovid := "DROP TABLE IF EXISTS requirement_1_covid_reports;"
+
+	_, err = db.Exec(dropTableStatementCovid)
+	if err != nil {
+		panic(err)
+	}
+
+	createTableStatementCovid := `CREATE TABLE requirement_1_covid_reports (
+								Zipcode               TEXT,
+								WeekStart   TIMESTAMPTZ,
+								WeekEnd       TIMESTAMPTZ,
+								TestsWeekly      INT,
+								PctPos      FLOAT,
+								Population     INT,
+								Cases INT
+							);`
+
+	_, err = db.Exec(createTableStatementCovid)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("data mart tables created")
 }
 
-func LoadToDataMart(tripRecords []TaxiTrips) {
+func LoadToDataMart(tripRecords []TaxiTrips, covidReports []CovidReport) {
 	db, err := DMConnect()
 	if err != nil {
 		log.Fatal(err)
@@ -299,75 +325,92 @@ func LoadToDataMart(tripRecords []TaxiTrips) {
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO requirement_2_airport_trips (TripID, TaxiID, TripStartTimestamp, PickupLatitude, PickupLongitude, PickupLocationName, DropoffLatitude,	DropoffLongitude, DropoffZipCode) 
+	fmt.Println(tripRecords[1])
+
+	insertStatement1 := `INSERT INTO requirement_1_taxi_trips (TripID, TaxiID, TripStartTimestamp, PickupLatitude, PickupLongitude, DropoffLatitude, DropoffLongitude, PickupZipCode, DropoffZipCode)
 							values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-							ON CONFLICT (TripID) 
+							ON CONFLICT (TripID)
 							DO NOTHING;`
 
 	for _, v := range tripRecords {
-		_, err = db.Exec(insertStatement, v.TripID, v.TaxiID, v.TripStartTimestamp, v.PickupLatitude, v.PickupLongitude, v.PickupLocationName, v.DropoffLatitude, v.DropoffLongitude, v.DropoffZipCode)
+		_, err = db.Exec(insertStatement1, v.TripID, v.TaxiID, v.TripStartTimestamp, v.PickupLatitude, v.PickupLongitude, v.DropoffLatitude, v.DropoffLongitude, v.PickupZipCode, v.DropoffZipCode)
 		if err != nil {
 			log.Println("Error inserting record, TripID = ", v.TripID, err)
 		}
 	}
-}
 
-func TestInsertion() {
-	db, err := DMConnect()
-	if err != nil {
-		log.Fatal(err)
-	}
+	insertStatement2 := `INSERT INTO requirement_1_covid_reports (ZipCode, WeekStart, WeekEnd, TestsWeekly, PctPos, Population, Cases) 
+							values ($1, $2, $3, $4, $5, $6, $7);`
 
-	defer db.Close()
-
-	testStatement1 := "SELECT DropoffZipCode FROM requirement_2_airport_trips LIMIT 10"
-	rows, err := db.Query(testStatement1)
-	if err != nil {
-		panic(err)
-	}
-
-	defer rows.Close()
-
-	for rows.Next() {
-		var testzipcode string
-		err = rows.Scan(&testzipcode)
+	for _, v := range covidReports {
+		_, err = db.Exec(insertStatement2, v.Zipcode, v.WeekStart, v.WeekEnd, v.TestsWeekly, v.PctPos, v.population, v.cases)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("failed to insert: %v", err)
 		}
-		fmt.Println(testzipcode)
 	}
 }
 
 func main() {
 	Trips = query_taxis()
+	CovidReports = query_covid()
 
-	// Reverse geocode to return pickup location name. If location name matches one of the airports, add those records to new slice
-	for _, v := range Trips {
-		LocationName := GetLocationName("msds432-final-group-4", v.PickupLatitude, v.PickupLongitude)
+	for i, val := range CovidReports {
+		CovidReports[i].cases = int(math.Round(val.PctPos * float64(val.TestsWeekly)))
+	}
 
-		if LocationName == "O'Hare International Airport, 10000, Perimeter Road, O'Hare, Chicago, Jefferson Township, Cook County, Illinois, 60666, United States" || LocationName == "Lot A, O'Hare Commercial Departure, O'Hare, Chicago, Jefferson Township, Cook County, Illinois, 60666, United States" || LocationName == "Chicago Midway International Airport, 5700, South Cicero Avenue, Chicago, Illinois, 60638, United States" {
-			v.PickupLocationName = LocationName
-			AirportTrips = append(AirportTrips, v)
+	fmt.Println(CovidReports[1])
+
+	UniqueZipCoords := make(map[Coords]string)
+
+	// fmt.Println(CovidReports[1])
+
+	for i, val := range Trips {
+		Trips[i].PickupLatitude = math.Round(val.PickupLatitude*1000) / 1000
+		Trips[i].PickupLongitude = math.Round(val.PickupLongitude*1000) / 1000
+		Trips[i].DropoffLatitude = math.Round(val.DropoffLatitude*1000) / 1000
+		Trips[i].DropoffLongitude = math.Round(val.DropoffLongitude*1000) / 1000
+	}
+
+	for i, val := range Trips {
+
+		var dropCoords Coords
+
+		dropCoords.Latitude = val.DropoffLatitude
+		dropCoords.Longitude = val.DropoffLongitude
+
+		_, keyPresent := UniqueZipCoords[dropCoords]
+		if keyPresent {
+			Trips[i].DropoffZipCode = UniqueZipCoords[dropCoords]
+		} else {
+			zip := GetZipCode("msds432-final-group-4", dropCoords.Latitude, dropCoords.Longitude)
+			UniqueZipCoords[dropCoords] = zip
+			Trips[i].DropoffZipCode = zip
 		}
 	}
 
-	// For trips from airport, reverse geocode to get dropoff zip code and update struct with zipcode field
-	for i := 0; i < len(AirportTrips); i++ {
-		record := &AirportTrips[i]
-		zip, err := strconv.Atoi(GetZipCode("msds432-final-group-4", record.DropoffLatitude, record.DropoffLongitude))
-		if err != nil {
-			log.Println("Error converting zip to integer: ", err)
-		}
-		record.DropoffZipCode = zip
+	for i, val := range Trips {
 
-		// Can add mapping to neighborhoods here if we have time. TBD
+		var pickCoords Coords
+
+		pickCoords.Latitude = val.PickupLatitude
+		pickCoords.Longitude = val.PickupLongitude
+
+		_, keyPresent := UniqueZipCoords[pickCoords]
+		if keyPresent {
+			Trips[i].PickupZipCode = UniqueZipCoords[pickCoords]
+		} else {
+			zip := GetZipCode("msds432-final-group-4", pickCoords.Latitude, pickCoords.Longitude)
+			UniqueZipCoords[pickCoords] = zip
+			Trips[i].PickupZipCode = zip
+		}
 	}
+
+	// fmt.Println(Trips[1])
 
 	// Insert to Data Mart
-	CreateDataMartTable()
+	CreateDataMartTables()
 
-	LoadToDataMart(AirportTrips)
+	fmt.Println("loading to data mart...")
+	LoadToDataMart(Trips, CovidReports)
 
-	// Testing successful ingestion to Data Mart
-	// TestInsertion()
 }
