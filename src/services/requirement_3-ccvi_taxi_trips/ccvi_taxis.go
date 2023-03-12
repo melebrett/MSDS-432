@@ -16,6 +16,7 @@ import (
 	"cloud.google.com/go/cloudsqlconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/stdlib"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -29,6 +30,8 @@ type TaxiTrips struct {
 	DropoffLongitude    float64
 	PickupZipCode       int
 	DropoffZipCode      int
+	PickupNeighborhood  string
+	DropoffNeighborhood string
 	PickupCCVIScore     float64
 	PickupCCVICategory  string
 	DropoffCCVIScore    float64
@@ -62,8 +65,14 @@ type NominatimAddress struct {
 	Postcode      int    `json:"postcode,string"`
 }
 
+type Neighborhood struct {
+	Zip              int
+	NeighborhoodName string
+}
+
 var Trips []TaxiTrips
 var CCVIrecords []CCVI
+var NeighborhoodMapping []Neighborhood
 
 func DLConnect() (*sql.DB, error) {
 	mustGetenv := func(k string) string {
@@ -164,14 +173,14 @@ func String2Timestamp(s string) time.Time {
 }
 
 func query_taxis() []TaxiTrips {
-	db, err := DLConnect()
+	db, err := DLConnectLocal()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	defer db.Close()
 
-	statement := `SELECT TripID, TaxiID, TripStartTimestamp, PickupCentroidLatitude, PickupCentroidLongitude, DropoffCentroidLatitude, DropoffCentroidLongitude FROM taxi_trips LIMIT 10000`
+	statement := `SELECT TripID, TaxiID, TripStartTimestamp, PickupCentroidLatitude, PickupCentroidLongitude, DropoffCentroidLatitude, DropoffCentroidLongitude FROM taxi_trips LIMIT 2500`
 
 	rows, err := db.Query(statement)
 	if err != nil {
@@ -203,7 +212,7 @@ func query_taxis() []TaxiTrips {
 }
 
 func query_ccvi() []CCVI {
-	db, err := DLConnect()
+	db, err := DLConnectLocal()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -237,6 +246,41 @@ func query_ccvi() []CCVI {
 	defer rows.Close()
 
 	return Data
+}
+
+func query_neighborhoods() []Neighborhood {
+	db, err := DMConnectLocal()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer db.Close()
+
+	statement := `SELECT zipcode, pri_neigh FROM neighborhood_zips`
+
+	rows, err := db.Query(statement)
+	if err != nil {
+		log.Fatal("Error querying database for neighborhood_zips: ", err)
+	}
+
+	Data := []Neighborhood{}
+
+	for rows.Next() {
+		var zip string
+		var neigh string
+		err = rows.Scan(&zip, &neigh)
+		if err != nil {
+			log.Fatal("Scan error", err)
+		}
+		temp := Neighborhood{Zip: String2Int(zip), NeighborhoodName: neigh}
+
+		Data = append(Data, temp)
+	}
+
+	defer rows.Close()
+
+	return Data
+
 }
 
 func GetZipCode(userAgent string, lat, lon float64) int {
@@ -274,7 +318,7 @@ func GetZipCode(userAgent string, lat, lon float64) int {
 }
 
 func CreateDataMartTable() {
-	db, err := DMConnect()
+	db, err := DMConnectLocal()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -298,6 +342,8 @@ func CreateDataMartTable() {
 								DropoffLongitude     FLOAT,
 								PickupZipCode		 INTEGER,
 								DropoffZipCode       INTEGER,
+								PickupNeighborhood	 TEXT,
+								DropoffNeighborhood  TEXT,
 								PickupCCVIscore		 FLOAT,
 								PickupCCVIcategory	 TEXT,
 								DropoffCCVIscore	 FLOAT,
@@ -311,20 +357,20 @@ func CreateDataMartTable() {
 }
 
 func LoadToDataMart(TaxisCCVI []TaxiTrips) {
-	db, err := DMConnect()
+	db, err := DMConnectLocal()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	defer db.Close()
 
-	insertStatement := `INSERT INTO requirement_3_ccvi_alerts (TripID, TaxiID, TripStartTimestamp, PickupLatitude, PickupLongitude, DropoffLatitude, DropoffLongitude, PickupZipCode, DropoffZipCode, PickupCCVIscore, PickupCCVIcategory, DropoffCCVIscore, DropoffCCVIcategory) 
-							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	insertStatement := `INSERT INTO requirement_3_ccvi_alerts (TripID, TaxiID, TripStartTimestamp, PickupLatitude, PickupLongitude, DropoffLatitude, DropoffLongitude, PickupZipCode, DropoffZipCode, PickupNeighborhood, DropoffNeighborhood, PickupCCVIscore, PickupCCVIcategory, DropoffCCVIscore, DropoffCCVIcategory) 
+							values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 							ON CONFLICT (TripID) 
 							DO NOTHING;`
 
 	for _, v := range TaxisCCVI {
-		_, err = db.Exec(insertStatement, v.TripID, v.TaxiID, v.TripStartTimestamp, v.PickupLatitude, v.PickupLongitude, v.DropoffLatitude, v.DropoffLongitude, v.PickupZipCode, v.DropoffZipCode, v.PickupCCVIScore, v.PickupCCVICategory, v.DropoffCCVIScore, v.DropoffCCVICategory)
+		_, err = db.Exec(insertStatement, v.TripID, v.TaxiID, v.TripStartTimestamp, v.PickupLatitude, v.PickupLongitude, v.DropoffLatitude, v.DropoffLongitude, v.PickupZipCode, v.DropoffZipCode, v.PickupNeighborhood, v.DropoffNeighborhood, v.PickupCCVIScore, v.PickupCCVICategory, v.DropoffCCVIScore, v.DropoffCCVICategory)
 		if err != nil {
 			log.Println("Error inserting record, TripID = ", v.TripID, err)
 		}
@@ -332,14 +378,14 @@ func LoadToDataMart(TaxisCCVI []TaxiTrips) {
 }
 
 func TestInsertion() {
-	db, err := DMConnect()
+	db, err := DMConnectLocal()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	defer db.Close()
 
-	testStatement1 := "SELECT DropoffCCVIscore FROM requirement_3_ccvi_alerts LIMIT 50"
+	testStatement1 := "SELECT PickupNeighborhood FROM requirement_3_ccvi_alerts LIMIT 50"
 	rows, err := db.Query(testStatement1)
 	if err != nil {
 		panic(err)
@@ -357,6 +403,68 @@ func TestInsertion() {
 	}
 }
 
+func DLConnectLocal() (*sql.DB, error) {
+	//Retreiving DB connection credential environment variables
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println("Could not load .env file")
+	}
+
+	HOST := os.Getenv("DLHOST")
+	PORT := os.Getenv("DLPORT")
+	USER := os.Getenv("DLUSER")
+	PASSWORD := os.Getenv("DLPASSWORD")
+	DBNAME := os.Getenv("DLDBNAME")
+
+	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
+
+	db, err := sql.Open("postgres", DB_DSN)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// err = db.Ping()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	fmt.Println("Successfully connected to DB")
+
+	return db, nil
+}
+
+func DMConnectLocal() (*sql.DB, error) {
+	//Retreiving DB connection credential environment variables
+	err := godotenv.Load(".env")
+	if err != nil {
+		fmt.Println("Could not load .env file")
+	}
+
+	HOST := os.Getenv("DMHOST")
+	PORT := os.Getenv("DMPORT")
+	USER := os.Getenv("DMUSER")
+	PASSWORD := os.Getenv("DMPASSWORD")
+	DBNAME := os.Getenv("DMDBNAME")
+
+	DB_DSN := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", HOST, PORT, USER, PASSWORD, DBNAME)
+
+	db, err := sql.Open("postgres", DB_DSN)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// err = db.Ping()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	fmt.Println("Successfully connected to DB")
+
+	return db, nil
+}
+
 func main() {
 	// Query CCVI records, parse for zip code records to match to taxi trips
 	CCVIrecords = query_ccvi()
@@ -370,6 +478,9 @@ func main() {
 
 	// Query taxi dataset
 	Trips = query_taxis()
+
+	// Query neighborhood-zip code mapping
+	NeighborhoodMapping = query_neighborhoods()
 
 	// For taxi trips, reverse geocode to get pickup and dropoff zip codes, link zip codes to relevant CCVI score, and update struct fields
 	for i := 0; i < len(Trips); i++ {
@@ -395,11 +506,21 @@ func main() {
 				record.DropoffCCVICategory = v.CCVICategory
 			}
 		}
+
+		for _, v := range NeighborhoodMapping {
+			if v.Zip == record.PickupZipCode {
+				record.PickupNeighborhood = v.NeighborhoodName
+			}
+
+			if v.Zip == record.DropoffZipCode {
+				record.DropoffNeighborhood = v.NeighborhoodName
+			}
+		}
 	}
 
 	CreateDataMartTable()
 
 	LoadToDataMart(Trips)
 
-	// TestInsertion()
+	TestInsertion()
 }

@@ -5,6 +5,7 @@ go 1.19
 require (
 	cloud.google.com/go/cloudsqlconn v1.2.1
 	github.com/jackc/pgx/v4 v4.18.1
+	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.7
 )
 
